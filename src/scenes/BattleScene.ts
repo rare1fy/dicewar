@@ -237,8 +237,8 @@ export class BattleScene extends Phaser.Scene {
       game: snap.game,
       dice: snap.dice,
       selectedDice: selected,
+      hand,
       targetEnemy,
-      handType: hand.bestHand,
       pointSum,
     });
 

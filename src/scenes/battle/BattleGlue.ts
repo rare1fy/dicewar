@@ -190,7 +190,7 @@ export function computeBasicEnemyAttack(
  *
  * ⚠️ 作用域限制：δ-1 只覆盖 MVP 三件遗物用到的字段。
  *   未来扩展遗物时，若 effect 返回了本类型未声明的字段（armor/pierce/statusEffects/purifyDebuff/…）
- *   必须在此类型和 aggregateOnPlayEffects 里同步增加，并评估 applyRelicAggregateOnPlay 的消费点。
+ *   必须在此类型和 triggerOnPlayRelics 里同步增加，并评估消费点。
  */
 export interface RelicEffectAggregate {
   /** 伤害倍率累乘（初值 1） */
@@ -202,35 +202,69 @@ export interface RelicEffectAggregate {
 export const EMPTY_RELIC_AGGREGATE: RelicEffectAggregate = { multiplier: 1, heal: 0 };
 
 /**
+ * 从牌型结果推导"升档后的真实顺子长度"。
+ *   activeHands 中 `6顺/5顺/4顺/顺子(=3顺)` 是互斥的，最多出现一个。
+ *   不是顺子返回 0。
+ *
+ * 用途：修复 `arithmetic_gauge` + `dimension_crush` 组合场景下
+ *   `buildRelicContext.diceCount` 仍然是原始 `selected.length`（未升档）
+ *   导致 arithmetic_gauge 按原始档位取倍率的 bug（Verify δ-1 抓到）。
+ */
+function deriveStraightLen(hand: HandResult): number {
+  if (hand.activeHands.includes('6顺')) return 6;
+  if (hand.activeHands.includes('5顺')) return 5;
+  if (hand.activeHands.includes('4顺')) return 4;
+  if (hand.activeHands.includes('顺子')) return 3;
+  return 0;
+}
+
+/**
  * 触发所有 on_play 遗物并聚合返回值。
  *
  * 收口原则（对齐铁律 C2 / C3）：
  *   - ctx 统一走 buildRelicContext（C3）
  *   - 触发入口集中在本函数（C2 的 Phaser 仓最小实现；若未来补齐 engine/triggerRelics 请迁移此处）
  *
- * δ-1 作用域：只聚合 multiplier / heal 两个字段。其它字段被**静默丢弃**并输出 console.warn 提醒。
+ * δ-1 作用域：只聚合 multiplier / heal 两个字段。其它字段被静默丢弃（未来扩展遗物时同步追加映射）。
+ *
+ * diceCount 修正（Verify δ-1 REJECT 修复）：
+ *   - `dimension_crush` 升档后，`hand.activeHands` 可能把 3 颗骰子的顺子认定为 `4顺`；
+ *   - 若直接把 `selectedDice.length` 喂给 `buildRelicContext.diceCount`，
+ *     `arithmetic_gauge` 会按原始档位（3顺系数 1.5x）取倍率，而不是升档后（4顺系数 2.0x）。
+ *   - 当 handType 含"顺"时用升档后的真实顺子长度覆盖 diceCount。
+ *   - ⚠️ 这与原版 dicehero2 的 expectedOutcomeCalc.ts / postPlayEffects.ts 行为**不一致**（那边也传原始 selected.length），
+ *     Phaser 仓在此点**领先修复**。见 TASKS.md 的 PHASER-FIX-ARITHMETIC-GAUGE-DICECOUNT（待 Designer 追认）。
  */
 export function triggerOnPlayRelics(params: {
   relics: Relic[];
   game: GameState;
   dice: Die[];
   selectedDice: Die[];
+  hand: HandResult;
   targetEnemy: Enemy | null;
-  handType: string;
   pointSum: number;
 }): RelicEffectAggregate {
-  const { relics, game, dice, selectedDice, targetEnemy, handType, pointSum } = params;
+  const { relics, game, dice, selectedDice, hand, targetEnemy, pointSum } = params;
+
+  // 升档后的真实顺子长度（非顺子为 0）
+  const straightLen = deriveStraightLen(hand);
 
   const ctx = buildRelicContext({
     game,
     dice,
     targetEnemy,
     rerollsThisTurn: 0, // δ-1 暂不跟踪本回合重投次数（δ-2 接入）
-    handType,
+    handType: hand.bestHand,
     selectedDice,
     pointSum,
     hasPlayedThisTurn: false, // 触发时机：本次出牌"即将"结算，此前未出过
   });
+
+  // diceCount 修正：若是顺子且升档后长度 > 选骰数，override 为真实顺子长度
+  // （buildRelicContext 目前没独立 straightLen 字段，用 ctx 派生值后覆盖是零侵入方案）
+  if (straightLen > selectedDice.length) {
+    ctx.diceCount = straightLen;
+  }
 
   const agg: RelicEffectAggregate = { multiplier: 1, heal: 0 };
 
@@ -240,9 +274,7 @@ export function triggerOnPlayRelics(params: {
 
     if (typeof eff.multiplier === 'number') agg.multiplier *= eff.multiplier;
     if (typeof eff.heal === 'number') agg.heal += eff.heal;
-
-    // δ-1 静默丢弃字段警告（仅首次出现时给一次 console.warn，避免刷屏）
-    // 未来扩展遗物请把字段加到 RelicEffectAggregate 并在此处映射
+    // 其它字段（armor/pierce/statusEffects/purifyDebuff/…）δ-1 作用域外静默丢弃
   }
 
   return agg;
