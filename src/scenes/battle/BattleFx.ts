@@ -77,32 +77,36 @@ export function playDamageFloat(
 }
 
 /**
- * 目标红色闪烁（2 次脉冲）
- * 调方传 Phaser.GameObjects.Container（或任何带 setTint 的对象，这里用泛型限制）
+ * 目标红色闪烁（共 4 段：红→原→红→原，tweens.addCounter 实现）
+ *
+ * 实现细节：只对 container.list 中**第一个** Rectangle 节点做闪烁，
+ * 约定是该容器的面板背景（panelBg）。这样避免把 HP 条等其它矩形一起染红，
+ * 保留"HP 条低血量时渐红"的颜色语义。
+ *
+ * Verify δ-2 [WARN-A] 修复：过去用遍历全部 Rectangle 会污染 HP 条语义。
  */
 export function flashTarget(
   scene: Phaser.Scene,
   target: Phaser.GameObjects.Container,
 ): void {
-  // Container 本身不支持 tint，遍历其中 Rectangle 子节点做闪烁
-  const rects = target.list.filter(
+  const panelBg = target.list.find(
     (obj): obj is Phaser.GameObjects.Rectangle => obj instanceof Phaser.GameObjects.Rectangle,
   );
-  if (rects.length === 0) return;
+  if (!panelBg) return;
 
-  const originalColors = rects.map((r) => r.fillColor);
+  const originalColor = panelBg.fillColor;
 
-  // 闪红 → 复原 → 再闪红 → 再复原
+  // repeat: 3 + yoyo: true → start→yoyo→repeat→yoyo→repeat→yoyo→complete 共 4 次颜色翻转，约 320ms
   scene.tweens.addCounter({
     from: 0,
     to: 1,
     duration: 80,
     repeat: 3,
     yoyo: true,
-    onStart: () => rects.forEach((r) => r.setFillStyle(0xff0000)),
-    onYoyo: () => rects.forEach((r, i) => r.setFillStyle(originalColors[i])),
-    onRepeat: () => rects.forEach((r) => r.setFillStyle(0xff0000)),
-    onComplete: () => rects.forEach((r, i) => r.setFillStyle(originalColors[i])),
+    onStart: () => panelBg.setFillStyle(0xff0000),
+    onYoyo: () => panelBg.setFillStyle(originalColor),
+    onRepeat: () => panelBg.setFillStyle(0xff0000),
+    onComplete: () => panelBg.setFillStyle(originalColor),
   });
 }
 
