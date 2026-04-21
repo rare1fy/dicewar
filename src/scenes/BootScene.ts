@@ -55,6 +55,16 @@ export class BootScene extends Phaser.Scene {
       fontSize: "24px",
       color: "#4ade80",
     }).setOrigin(0.5).setName("fps");
+
+    // 进入牌型判定自测页
+    const toTestBtn = this.add.text(centerX, this.scale.height - 160, "→ 牌型判定自测", {
+      fontFamily: "Arial, sans-serif",
+      fontSize: "28px",
+      color: "#ffffff",
+      backgroundColor: "#7c3aed",
+      padding: { x: 20, y: 12 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    toTestBtn.on("pointerdown", () => this.scene.start("HandTestScene"));
   }
 
   update(): void {
