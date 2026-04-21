@@ -29,7 +29,6 @@ import {
   evaluateHand,
   computePlayOutcome,
   applyDamageToEnemies,
-  computeBasicEnemyAttack,
   triggerOnPlayRelics,
   type PlayOutcomePatch,
   type RelicEffectAggregate,
@@ -37,9 +36,10 @@ import {
 import {
   playDamageFloat,
   flashTarget,
-  shakeOnPlayerHit,
   fadeInBanner,
 } from './battle/BattleFx';
+import { runEnemyTurn, type EnemyTurnResult } from './battle/BattleTurnRunner';
+import { buildBattleAICallbacks, bridgeScreenShake } from './battle/BattleAICallbacks';
 import { PlayerView } from './battle/view/PlayerView';
 import { EnemyView } from './battle/view/EnemyView';
 import { DiceTray } from './battle/view/DiceTray';
@@ -89,6 +89,9 @@ export class BattleScene extends Phaser.Scene {
   private battleResult: 'victory' | 'defeat' | null = null;
   private overBanner: Phaser.GameObjects.Container | null = null;
 
+  // δ-3d 防重入：敌人回合异步执行期间禁止再次点击"结束回合"
+  private isResolvingEnemyTurn = false;
+
   constructor() {
     super('BattleScene');
   }
@@ -101,6 +104,8 @@ export class BattleScene extends Phaser.Scene {
 
     // 订阅刷新所有视图
     this.battleState.subscribe((snap) => this.renderAllViews(snap));
+    // δ-3d：注册震屏桥——enemyAI 内部 setScreenShake(true) 上升沿触发一次 shakeOnPlayerHit
+    bridgeScreenShake(this, this.battleState);
     this.renderAllViews(this.battleState.getSnapshot());
 
     // 开局先抽一手牌
@@ -317,47 +322,66 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /**
-   * γ 段"结束回合"：敌人真实反击（attackCalc）→ 回收手牌 → 刷新 → 抽新牌。
-   * δ-1 追加：反击后检查玩家死亡；存活才刷新抽牌。
+   * δ-3d"结束回合"：调用 BattleTurnRunner.runEnemyTurn 封装完整的敌人回合流程，
+   * 包含 DOT 结算 / AI 决策 / 精英增强 / 回合结束处理 + 胜负判定。
    */
   private handleEndTurn(): void {
     if (this.isBattleOver()) return;
     const snap = this.battleState.getSnapshot();
+    // δ-3d 防重入：逻辑层双重守卫（UI 层 ActionBar 已按 isEnemyTurn 禁用按钮）
+    if (snap.game.isEnemyTurn) return;
+    if (this.isResolvingEnemyTurn) return;
+    this.isResolvingEnemyTurn = true;
+
     const livingEnemies = snap.enemies.filter((e) => e.hp > 0);
 
-    // 敌人反击（γ 段单敌逐个跑基础攻击，δ 段接 enemyAI 走完整技能分支）
-    for (const enemy of livingEnemies) {
-      const patch = computeBasicEnemyAttack(enemy, this.battleState.getSnapshot().game.armor, this.battleState.getSnapshot().game.statuses);
-      if (patch.effectiveDamage <= 0) continue;
-      this.battleState.setters.game((g) => ({
-        ...g,
-        armor: g.armor - patch.armorConsumed,
-        hp: Math.max(0, g.hp - patch.hpDamage),
-      }));
-      // δ-2 演出：震屏 + 玩家身上飘白字（仅显示扣血部分，armor 吸收的不显示）
-      shakeOnPlayerHit(this);
-      if (patch.hpDamage > 0) {
-        const pCenter = this.playerView.getWorldCenter();
-        playDamageFloat(this, pCenter.x, pCenter.y, patch.hpDamage, 'normal');
-      }
-    }
+    // δ-3d：用 runEnemyTurn 替代手动循环 computeBasicEnemyAttack
+    // 构造 EnemyAICallbacks（通过 BattleAICallbacks 工厂）
+    const cb = buildBattleAICallbacks(
+      this,
+      this.battleState,
+      this.playerView,
+      this.enemyView,
+      () => { /* handleVictory 由 runner 内部处理 */ },
+    );
 
-    // 战败检查（若玩家死亡则跳过回合刷新）
-    if (this.checkBattleOver()) return;
+    runEnemyTurn(snap.game, livingEnemies, snap.dice, snap.rerollCount, cb)
+      .then((result: EnemyTurnResult) => {
+        this.isResolvingEnemyTurn = false;
 
-    // 回收手牌到弃骰库 + 回合刷新
-    const currentDice = this.battleState.getSnapshot().dice;
-    this.battleState.setters.game((g) => ({
-      ...g,
-      discardPile: discardDice(currentDice, g.discardPile),
-      playsLeft: g.maxPlays,
-      battleTurn: g.battleTurn + 1,
-    }));
-    // 恢复弃牌次数（UI 层专属字段，独立于 GameState）
-    this.battleState.setters.discardLeft(this.battleState.getSnapshot().discardsPerTurn);
+        // δ-3 胜负闭环：根据 EnemyTurnResult 标志走横幅逻辑
+        // 注：演出（震屏/飘字/闪烁）已由 executeEnemyTurn 内部通过 callbacks 处理，
+        if (result.victory) {
+          this.battleResult = 'victory';
+          this.showOverBanner('胜利', '#22c55e');
+          return; // 战斗结束，不刷新抽牌
+        }
+        if (result.defeat) {
+          this.battleResult = 'defeat';
+          this.showOverBanner('失败', '#ef4444');
+          return; // 战斗结束，不刷新抽牌
+        }
 
-    // 抽新手牌
-    this.drawHand();
+        // 战斗继续：回收手牌到弃骰库 + 回合刷新
+        // 注：battleTurn 已由 executeEnemyTurn 内部步骤7推进，此处不重复
+        const currentDice = this.battleState.getSnapshot().dice;
+        this.battleState.setters.game((g) => ({
+          ...g,
+          discardPile: discardDice(currentDice, g.discardPile),
+          playsLeft: g.maxPlays,
+        }));
+        // 恢复弃牌次数（UI 层专属字段，独立于 GameState）
+        this.battleState.setters.discardLeft(this.battleState.getSnapshot().discardsPerTurn);
+
+        // 抽新手牌
+        this.drawHand();
+      })
+      .catch((err) => {
+        // δ-3d 兜底：异常时释放锁 + 恢复 isEnemyTurn + 日志，避免战斗卡死
+        this.isResolvingEnemyTurn = false;
+        this.battleState.setters.game((g) => ({ ...g, isEnemyTurn: false }));
+        console.error('[BattleScene] runEnemyTurn 异常:', err);
+      });
   }
 
   // ==========================================================================

@@ -70,13 +70,16 @@ export class ActionBar {
 
   public render(snap: Readonly<BattleStateSnapshot>): void {
     const { game, dice, discardLeft } = snap;
+    // δ-3d 防重入：敌人回合期间禁用所有按钮
+    const isEnemyTurn = game.isEnemyTurn;
     const hasSelected = dice.some((d) => d.selected && !d.spent);
-    const canPlay = game.playsLeft > 0 && hasSelected;
-    const canDiscard = discardLeft > 0;
+    const canPlay = !isEnemyTurn && game.playsLeft > 0 && hasSelected;
+    const canDiscard = !isEnemyTurn && discardLeft > 0;
+    const canEndTurn = !isEnemyTurn;
 
     this.updateButton(this.playBtn, canPlay, `出牌 (剩${game.playsLeft})`);
     this.updateButton(this.discardBtn, canDiscard, `弃牌重抽 (剩${discardLeft})`);
-    this.updateButton(this.endTurnBtn, true, '结束回合');
+    this.updateButton(this.endTurnBtn, canEndTurn, isEnemyTurn ? '敌方回合...' : '结束回合');
   }
 
   private updateButton(btn: ButtonWidget, enabled: boolean, label: string): void {
@@ -91,3 +94,4 @@ export class ActionBar {
     this.endTurnBtn.container.destroy();
   }
 }
+
