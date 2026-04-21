@@ -68,6 +68,7 @@ export class BattleState {
 
   public readonly refs: {
     game: MutableRef<GameState>;
+    enemies: MutableRef<Enemy[]>;
     playsPerEnemy: MutableRef<Record<string, number>>;
   };
 
@@ -98,6 +99,10 @@ export class BattleState {
       game: {
         get current() { return self.snapshot.game; },
         set current(next: GameState) { self.assign('game', next); },
+      },
+      enemies: {
+        get current() { return self.snapshot.enemies; },
+        set current(next: Enemy[]) { self.assign('enemies', next); },
       },
       playsPerEnemy: {
         get current() { return self.snapshot.playsPerEnemy; },
