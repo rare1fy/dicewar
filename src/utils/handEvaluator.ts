@@ -1,9 +1,10 @@
 import { Die, HandType, HandResult } from '../types/game';
 import { getDiceDef } from '../data/dice';
 
-export const checkHands = (dice: Die[], _options?: { straightUpgrade?: number }): HandResult => {
-  // [KNOWN-BUG PHASER-FIX-STRAIGHT-UPGRADE] dicehero2 原型历史 bug：straightUpgrade 参数在原函数体内零引用，顺子升级遗物实际未生效
-  // 迁移时用 _options 装死绕过 noUnusedParameters，等后续迁 engine/ 时一并修复。
+export const checkHands = (dice: Die[], options?: { straightUpgrade?: number }): HandResult => {
+  // [FIXED PHASER-FIX-STRAIGHT-UPGRADE 2026-04-21] 消费 straightUpgrade：顺子长度升档，6顺封顶。
+  // Designer 裁定口径：仅做顺子系长度升档（顺子→4顺→5顺→6顺封顶），不可升成元素顺/皇家元素顺。
+  const straightUpgrade = Math.max(0, options?.straightUpgrade ?? 0);
   if (dice.length === 0) return { bestHand: '普通攻击', allHands: [], activeHands: ['普通攻击'] };
 
   // ignoreForHandType: 镜像骰子等不参与牌型判定，但其点数仍计入总点数
@@ -32,6 +33,11 @@ export const checkHands = (dice: Die[], _options?: { straightUpgrade?: number })
       isStraight = true;
       straightLen = dice.length;
     }
+  }
+
+  // 消费 straightUpgrade：仅对已成立的顺子生效，按档位升级，封顶 6顺
+  if (isStraight && straightUpgrade > 0) {
+    straightLen = Math.min(6, straightLen + straightUpgrade);
   }
 
   const hands: Set<HandType> = new Set();

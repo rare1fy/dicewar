@@ -24,6 +24,10 @@ export interface SettlementContext {
   outcome: ExpectedOutcomeResult;
   targetEnemy: Enemy;
   comboFinisherBonus: number;
+  /**
+   * 顺子长度升档量（消费方：utils/handEvaluator.ts 的 checkHands）
+   * 契约：必须通过 engine/buildSettlementInputs.ts 的 buildSettlementInputs(game.relics).straightUpgrade 注入，禁止散写。
+   */
   straightUpgrade: number;
   isAoeActive: boolean;
 
