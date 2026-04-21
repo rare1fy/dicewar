@@ -26,7 +26,7 @@ import {
   evaluateHand,
   computePlayOutcome,
   applyDamageToEnemies,
-  computeEnemyAttack,
+  computeBasicEnemyAttack,
   type PlayOutcomePatch,
 } from './battle/BattleGlue';
 import { PlayerView } from './battle/view/PlayerView';
@@ -218,7 +218,7 @@ export class BattleScene extends Phaser.Scene {
     if (selected.length === 0 || snap.game.playsLeft <= 0) return;
 
     const hand = evaluateHand(selected);
-    const outcome = computePlayOutcome(selected, hand);
+    const outcome = computePlayOutcome(selected, hand, snap.game);
 
     // 标记为 spent
     this.battleState.setters.dice((prev) =>
@@ -266,7 +266,7 @@ export class BattleScene extends Phaser.Scene {
 
     // 敌人反击（γ 段单敌逐个跑基础攻击，δ 段接 enemyAI 走完整技能分支）
     for (const enemy of livingEnemies) {
-      const patch = computeEnemyAttack(enemy, this.battleState.getSnapshot().game.armor, this.battleState.getSnapshot().game.statuses);
+      const patch = computeBasicEnemyAttack(enemy, this.battleState.getSnapshot().game.armor, this.battleState.getSnapshot().game.statuses);
       if (patch.effectiveDamage <= 0) continue;
       this.battleState.setters.game((g) => ({
         ...g,
