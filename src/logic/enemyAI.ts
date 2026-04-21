@@ -56,6 +56,13 @@ export interface EnemyAICallbacks {
   triggerHourglass: typeof TriggerHourglassFn;
   handleVictory: () => void;
   gameRef: { current: GameState };
+  /**
+   * [PHASER-FIX-ENEMYAI-STALE-ENEMIES] 2026-04-22
+   * 可选：敌人数组的最新引用。若提供，则在 DOT 结算 / AI 决策 / 精英处理之间
+   * 重新读取 enemiesRef.current，避免使用入参 `enemies` 的旧快照。
+   * 兼容旧调用方（dicehero2 React 版）：未传时回退到入参快照（沿袭祖传行为）。
+   */
+  enemiesRef?: { current: Enemy[] };
 }
 
 // === 辅助：对DOT结算结果执行副作用 ===
@@ -169,14 +176,17 @@ export async function executeEnemyTurn(
   }
 
   // 4. 每个存活敌人执行AI决策
-  // [KNOWN-BUG PHASER-FIX-ENEMYAI-STALE-ENEMIES]
-  // 此处 currentEnemies 使用入参 enemies 的快照，未包含步骤 2（灼烧）和步骤 3（中毒）
-  // 的 setEnemies 更新结果。可能导致：
-  //   (1) 被 DOT 扣血但未扣死的敌人，后续 AI 仍读旧 HP/statuses
-  //   (2) 状态（freeze/slow/poison）duration 递减后，AI 本帧仍按递减前判定
-  // 该行为沿袭 dicehero2 祖传代码，MIG-05C 迁移期不修正，保持逻辑等价。
-  // 修复留给独立任务 PHASER-FIX-ENEMYAI-STALE-ENEMIES，需 Designer 先裁定是否为有意设计。
-  const currentEnemies = [...enemies];
+  // [PHASER-FIX-ENEMYAI-STALE-ENEMIES] 2026-04-22 修复
+  // 历史行为：currentEnemies 用入参 enemies 的回合开始快照，导致 DOT 扣血 / 状态递减
+  // 后 AI 仍按旧快照判定（未死敌人 HP、freeze/slow duration 都会错）。
+  // 修复：优先使用 cb.enemiesRef.current 读取最新数组；未传 ref 的旧调用方（React 仓）
+  // 回退到入参快照，保持向下兼容。
+  // 局限：本 for 循环内若某次 setEnemies 修改了当前正在处理的 `e` 自身，`e` 仍是
+  // 初始快照对象。若需要读取"被本循环修改过的自己的最新 HP/statuses"，调用者必须
+  // 在循环内通过 cb.enemiesRef.current.find(en => en.uid === e.uid) 重新取，
+  // 而不是等"下一帧"—— Phaser BattleState.setters 是同步的，ref 立即更新。
+  // 彻底修复留给后续 enemyAI 重构。
+  const currentEnemies = cb.enemiesRef ? [...cb.enemiesRef.current] : [...enemies];
   for (const e of currentEnemies.filter(en => en.hp > 0)) {
     await new Promise(r => setTimeout(r, 350));
 
