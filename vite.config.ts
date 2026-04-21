@@ -1,7 +1,10 @@
 import { defineConfig } from "vite";
 import { fileURLToPath, URL } from "node:url";
 
-export default defineConfig({
+// GitHub Pages 部署到 https://rare1fy.github.io/dicewar/ 需要 base='/dicewar/'
+// 本地 dev 用 '/' 避免资源路径错乱
+export default defineConfig(({ command }) => ({
+  base: command === "build" ? "/dicewar/" : "/",
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
@@ -23,4 +26,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
