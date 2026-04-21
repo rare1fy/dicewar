@@ -57,7 +57,7 @@ export class BootScene extends Phaser.Scene {
     }).setOrigin(0.5).setName("fps");
 
     // 进入牌型判定自测页
-    const toTestBtn = this.add.text(centerX, this.scale.height - 160, "→ 牌型判定自测", {
+    const toTestBtn = this.add.text(centerX, this.scale.height - 220, "→ 牌型判定自测", {
       fontFamily: "Arial, sans-serif",
       fontSize: "28px",
       color: "#ffffff",
@@ -65,6 +65,16 @@ export class BootScene extends Phaser.Scene {
       padding: { x: 20, y: 12 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     toTestBtn.on("pointerdown", () => this.scene.start("HandTestScene"));
+
+    // 进入战斗场景 MVP
+    const toBattleBtn = this.add.text(centerX, this.scale.height - 160, "→ 战斗场景 (UI-01-α)", {
+      fontFamily: "Arial, sans-serif",
+      fontSize: "28px",
+      color: "#ffffff",
+      backgroundColor: "#dc2626",
+      padding: { x: 20, y: 12 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    toBattleBtn.on("pointerdown", () => this.scene.start("BattleScene"));
   }
 
   update(): void {
