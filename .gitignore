@@ -14,3 +14,7 @@ pnpm-debug.log*
 
 assets-raw/
 dev-server.log
+
+# 微信开发者工具
+project.config.json
+project.private.config.json
