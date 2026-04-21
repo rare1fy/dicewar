@@ -169,6 +169,13 @@ export async function executeEnemyTurn(
   }
 
   // 4. 每个存活敌人执行AI决策
+  // [KNOWN-BUG PHASER-FIX-ENEMYAI-STALE-ENEMIES]
+  // 此处 currentEnemies 使用入参 enemies 的快照，未包含步骤 2（灼烧）和步骤 3（中毒）
+  // 的 setEnemies 更新结果。可能导致：
+  //   (1) 被 DOT 扣血但未扣死的敌人，后续 AI 仍读旧 HP/statuses
+  //   (2) 状态（freeze/slow/poison）duration 递减后，AI 本帧仍按递减前判定
+  // 该行为沿袭 dicehero2 祖传代码，MIG-05C 迁移期不修正，保持逻辑等价。
+  // 修复留给独立任务 PHASER-FIX-ENEMYAI-STALE-ENEMIES，需 Designer 先裁定是否为有意设计。
   const currentEnemies = [...enemies];
   for (const e of currentEnemies.filter(en => en.hp > 0)) {
     await new Promise(r => setTimeout(r, 350));
