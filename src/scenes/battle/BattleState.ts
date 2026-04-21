@@ -37,6 +37,10 @@ export interface BattleStateSnapshot {
   hpGained: boolean;
   playerEffect: string | null;
   playsPerEnemy: Record<string, number>;
+  /** 剩余弃牌次数（MVP）。专属 UI 层字段，不污染 GameState.freeRerollsLeft。 */
+  discardLeft: number;
+  /** 每回合弃牌次数上限（MVP：1） */
+  discardsPerTurn: number;
 }
 
 // ============================================================================
@@ -82,6 +86,7 @@ export class BattleState {
     armorGained: StateSetter<boolean>;
     hpGained: StateSetter<boolean>;
     playerEffect: StateSetter<string | null>;
+    discardLeft: StateSetter<number>;
   };
 
   constructor(initial: BattleStateSnapshot) {
@@ -116,6 +121,7 @@ export class BattleState {
       armorGained: (n) => this.apply('armorGained', n),
       hpGained: (n) => this.apply('hpGained', n),
       playerEffect: (n) => this.apply('playerEffect', n),
+      discardLeft: (n) => this.apply('discardLeft', n),
     };
   }
 
