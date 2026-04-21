@@ -77,6 +77,58 @@ export function playDamageFloat(
 }
 
 /**
+ * 纯文本飘字（非数值反馈：冻结 / 怒火+X / 0 伤害吸收提示等）
+ *
+ * 与 playDamageFloat 共用上升淡出的视觉模式，但：
+ *   - 文本不加 ± 前缀
+ *   - 字号略小
+ *   - 颜色由调用方传入（Tailwind class 或 16 进制，这里做简单归一）
+ */
+export function playLabelFloat(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  label: string,
+  colorHint: string = '#ffffff',
+): void {
+  const color = normalizeColorHint(colorHint);
+  const text = scene.add.text(x, y, label, {
+    fontFamily: 'Arial, sans-serif',
+    fontSize: '22px',
+    color,
+    fontStyle: 'bold',
+    stroke: '#000000',
+    strokeThickness: 3,
+  }).setOrigin(0.5).setDepth(800);
+
+  scene.tweens.add({
+    targets: text,
+    y: y - 50,
+    alpha: 0,
+    duration: 700,
+    ease: 'Cubic.easeOut',
+    onComplete: () => text.destroy(),
+  });
+}
+
+/**
+ * 把 Tailwind class（text-cyan-400 / text-orange-400 ...）或 #XXXXXX 归一为 CSS 颜色。
+ * 覆盖 enemyAI 里出现的全部颜色名。
+ */
+function normalizeColorHint(hint: string): string {
+  if (hint.startsWith('#')) return hint;
+  if (hint.includes('cyan')) return '#22d3ee';
+  if (hint.includes('orange')) return '#fb923c';
+  if (hint.includes('yellow')) return '#fbbf24';
+  if (hint.includes('purple')) return '#a855f7';
+  if (hint.includes('green')) return '#22c55e';
+  if (hint.includes('red')) return '#ef4444';
+  if (hint.includes('blue')) return '#60a5fa';
+  if (hint.includes('gray')) return '#9ca3af';
+  return '#ffffff';
+}
+
+/**
  * 目标红色闪烁（共 4 段：红→原→红→原，tweens.addCounter 实现）
  *
  * 实现细节：只对 container.list 中**第一个** Rectangle 节点做闪烁，

@@ -35,7 +35,7 @@ import { buildRelicContext } from '../../engine/buildRelicContext';
 import { hasFatalProtection } from '../../engine/relicQueries';
 import { triggerHourglass } from '../../engine/relicUpdates';
 import { BattleState } from './BattleState';
-import { playDamageFloat, shakeOnPlayerHit } from './BattleFx';
+import { playDamageFloat, playLabelFloat, shakeOnPlayerHit } from './BattleFx';
 import { PlayerView } from './view/PlayerView';
 import { EnemyView } from './view/EnemyView';
 
@@ -99,18 +99,25 @@ export function buildBattleAICallbacks(
 
     // ---- UI 反馈：桥到 BattleFx ----
     addFloatingText: (text, color, _icon, target = 'enemy') => {
-      const kind = colorToFxKind(color);
       const center = target === 'player'
         ? playerView.getWorldCenter()
         : enemyView.getWorldCenter();
-      // text 可能是 '-5' 或 '冻结' 等。尝试抽数字；非数字就显示为伤害 0
-      const match = /-?(\d+)/.exec(text);
-      const amount = match ? parseInt(match[1], 10) : 0;
-      if (amount > 0) {
-        playDamageFloat(scene, center.x, center.y, amount, kind);
+      // 尝试抽取数字：优先匹配带 ± 的整数（如 '-5' / '+3'）
+      const match = /^([+-]?)(\d+)$/.exec(text.trim());
+      if (match) {
+        const amount = parseInt(match[2], 10);
+        if (amount > 0) {
+          // 有符号的整数伤害/回血：走 playDamageFloat
+          const kind = colorToFxKind(color);
+          playDamageFloat(scene, center.x, center.y, amount, kind);
+        } else {
+          // 伤害 0（如被护甲完全吸收）：用 label 飘字显示"0"，颜色由 color hint 决定
+          playLabelFloat(scene, center.x, center.y, '0', color);
+        }
+      } else {
+        // 非数字文本（'冻结' / '怒火+X' / 自定义标签）：走 playLabelFloat
+        playLabelFloat(scene, center.x, center.y, text, color);
       }
-      // 非数字飘字（'冻结' / '怒火+X'）当前 MVP 不显示，只 console
-      if (!match) console.log(`[FloatingText] ${target}: ${text} (${color})`);
     },
 
     // ---- 日志 / 提示：console 兜底 ----
@@ -142,18 +149,28 @@ export function buildBattleAICallbacks(
 }
 
 /**
- * 辅助：当 enemyAI 通过 setScreenShake(true) 触发震屏时，主动调一次 BattleFx.shakeOnPlayerHit。
- * 这个辅助要在 BattleScene 里订阅 screenShake 状态变化时调用，而不是放在 callbacks 里。
+ * 辅助：当 enemyAI 通过 setScreenShake(true) 触发震屏时，**边沿触发**一次 shake。
+ *
+ * 为什么必须边沿触发：
+ *   enemyAI 的 setScreenShake 模式是
+ *     setScreenShake(true) → (其它 setGame/setEnemies 多次触发 subscribe) → setScreenShake(false)
+ *   如果简单订阅 snap.screenShake==true 就 shake，每次 subscribe 通知都会再 shake 一次，
+ *   产生重复震屏。
+ *   修正：记录上一次 screenShake 值，只在 false→true 的上升沿触发。
+ *
+ * Verify δ-3b [FAIL-F] 修复。
  */
 export function bridgeScreenShake(
   scene: Phaser.Scene,
   state: BattleState,
 ): () => void {
+  let lastShake = state.getSnapshot().screenShake;
   return state.subscribe((snap) => {
-    if (snap.screenShake) {
+    if (snap.screenShake && !lastShake) {
+      // 上升沿：false → true，触发一次
       shakeOnPlayerHit(scene);
-      // 触发后立即回落，防止反复震屏。enemyAI 会在 attack 结束时调 setScreenShake(false)。
     }
+    lastShake = snap.screenShake;
   });
 }
 
