@@ -1,14 +1,24 @@
 /**
- * BattleGlue.ts — UI-01-γ 胶水层
+ * BattleGlue.ts — UI-01-γ/δ 胶水层
  *
  * 职责（SRP）：将 Phaser BattleScene 的用户行为翻译成对 logic/ 层纯函数的调用，
  *   并把结果打包成 State Patch 返回。**自身不持有状态，不直接 setState。**
  *
- * γ 段范围（谨守最小闭环）：
+ * γ 段范围（已完工）：
  *   - ✅ 出牌真实结算：checkHands → activeHands 累计倍率 → 真实伤害 + AOE（对齐正式规则）
  *   - ✅ 敌人基础反击：attackCalc.getEffectiveAttackDmg（基础分支，不含 ranger/slow 多段）
- *   - ❌ 遗物触发链：δ 段再接（executePostPlayEffects 需要 15+ setter，本轮先挂空）
- *   - ❌ 结算演出：δ 段再接（runSettlementAnimation 需要完整 SettlementContext）
+ *
+ * δ-1 段范围（本轮新增）：
+ *   - ✅ 遗物触发链最小闭环：on_play 聚合 `{multiplier, heal}` 字段
+ *   - ✅ straightUpgrade 注入：走 engine/buildSettlementInputs（唯一合法入口）
+ *   - ✅ 遗物 multiplier 合并到最终伤害公式
+ *
+ * δ-1 作用域限制（重要）：
+ *   - 本轮仅处理 MVP 三件遗物依赖的 3 个字段：multiplier / heal / straightUpgrade
+ *   - 其它 RelicEffect 字段（armor/pierce/statusEffects/purifyDebuff/…）一律 **忽略**
+ *     未来扩展遗物时必须在 applyRelicAggregateOnPlay 里追加对应字段的映射
+ *   - 不接 executePostPlayEffects（仍需 15+ setter，留给完整结算链）
+ *   - 不接结算演出（δ-2 再做）
  *
  * γ 修订（2026-04-21 Verify 打回）：
  *   - 伤害公式修正：从 `bestHand 单查` 改为 `activeHands 累计`（对齐 expectedOutcomeCalc.ts L74-87）
@@ -16,11 +26,14 @@
  *   - 基础攻击函数改名：`computeEnemyAttack` → `computeBasicEnemyAttack`，诚实标注不覆盖 ranger/slow 多段
  */
 
-import type { Die, Enemy, StatusEffect, HandResult, GameState } from '../../types/game';
+import type { Die, Enemy, StatusEffect, HandResult, GameState, Relic } from '../../types/game';
+import type { RelicEffect } from '../../types/relics';
 import { checkHands } from '../../utils/handEvaluator';
 import { HAND_TYPES } from '../../data/handTypes';
 import { getEffectiveAttackDmg } from '../../logic/attackCalc';
 import { isAoeHand } from '../../logic/battleHelpers';
+import { buildRelicContext } from '../../engine/buildRelicContext';
+import { buildSettlementInputs } from '../../engine/buildSettlementInputs';
 
 // ============================================================
 // 出牌结算
@@ -43,14 +56,21 @@ export interface PlayOutcomePatch {
 
 /**
  * 评估选中骰组成的最佳牌型。
- * γ 段不注入 straightUpgrade（MVP 三件遗物中无 straightUpgrade 相关，δ 段接遗物触发时再用 engine/buildSettlementInputs）。
+ *
+ * δ-1 起：**必须**传 relics 参数，由 buildSettlementInputs(relics).straightUpgrade 注入。
+ *   - dimension_crush 通过此路径影响顺子长度判定
+ *   - 走 engine/buildSettlementInputs 唯一入口（契约见 logic/postPlayEffects.ts PostPlayContext 注释）
  */
-export function evaluateHand(selected: Die[]): HandResult {
-  return checkHands(selected);
+export function evaluateHand(selected: Die[], relics: Relic[]): HandResult {
+  const { straightUpgrade } = buildSettlementInputs(relics);
+  return checkHands(selected, { straightUpgrade });
 }
 
 /**
- * 计算出牌后的伤害分布（不含遗物触发，不含状态施加）。
+ * 计算出牌后的伤害分布（不含状态施加）。
+ *
+ * δ-1 起接入 on_play 遗物的 multiplier 聚合：
+ *   finalMultiplier = handMultiplier × relicMultiplier
  *
  * 伤害公式（对齐 logic/expectedOutcomeCalc.ts L74-87，正式规则）：
  *   handMultiplier = 1
@@ -58,7 +78,7 @@ export function evaluateHand(selected: Die[]): HandResult {
  *     level = handLevels[handName] ?? 1
  *     levelBonusMult = (level - 1) * 0.3
  *     handMultiplier += (handDef.mult - 1) + levelBonusMult
- *   伤害 = floor(骰点和 × handMultiplier)
+ *   伤害 = floor(骰点和 × handMultiplier × relicMultiplier)
  *
  * 为何必须用 activeHands 而不是 bestHand：
  *   checkHands 返回的 bestHand 可能是组合字符串（如 "元素顺 + 同元素"），
@@ -68,10 +88,11 @@ export function computePlayOutcome(
   selected: Die[],
   hand: HandResult,
   game: Pick<GameState, 'handLevels'>,
+  relicAggregate: RelicEffectAggregate = EMPTY_RELIC_AGGREGATE,
 ): PlayOutcomePatch {
   const diceSum = selected.reduce((sum, d) => sum + d.value, 0);
 
-  // activeHands 累计倍率（对齐正式规则）
+  // activeHands 累计牌型倍率（对齐正式规则）
   let handMultiplier = 1;
   for (const handName of hand.activeHands) {
     const handDef = HAND_TYPES.find((h) => h.name === handName);
@@ -81,7 +102,9 @@ export function computePlayOutcome(
     handMultiplier += (handDef.mult - 1) + levelBonusMult;
   }
 
-  const rawDamage = Math.floor(diceSum * handMultiplier);
+  // δ-1：叠加遗物 multiplier（arithmetic_gauge / crimson_grail / …）
+  const finalMultiplier = handMultiplier * relicAggregate.multiplier;
+  const rawDamage = Math.floor(diceSum * finalMultiplier);
 
   // AOE 判定收口到 logic/battleHelpers.isAoeHand（正式规则唯一真相）
   const aoe = isAoeHand(hand.activeHands);
@@ -92,7 +115,7 @@ export function computePlayOutcome(
     isAoe: aoe,
     handName: hand.bestHand,
     diceSum,
-    multiplier: handMultiplier,
+    multiplier: finalMultiplier,
   };
 }
 
@@ -156,4 +179,71 @@ export function computeBasicEnemyAttack(
   const hpDamage = effectiveDamage - armorConsumed;
 
   return { effectiveDamage, hpDamage, armorConsumed };
+}
+
+// ============================================================
+// δ-1：遗物 on_play 聚合触发
+// ============================================================
+
+/**
+ * on_play 遗物触发后聚合出来的"需要应用到 BattleState"的净值
+ *
+ * ⚠️ 作用域限制：δ-1 只覆盖 MVP 三件遗物用到的字段。
+ *   未来扩展遗物时，若 effect 返回了本类型未声明的字段（armor/pierce/statusEffects/purifyDebuff/…）
+ *   必须在此类型和 aggregateOnPlayEffects 里同步增加，并评估 applyRelicAggregateOnPlay 的消费点。
+ */
+export interface RelicEffectAggregate {
+  /** 伤害倍率累乘（初值 1） */
+  multiplier: number;
+  /** 净回血量（healing_breeze 等累加） */
+  heal: number;
+}
+
+export const EMPTY_RELIC_AGGREGATE: RelicEffectAggregate = { multiplier: 1, heal: 0 };
+
+/**
+ * 触发所有 on_play 遗物并聚合返回值。
+ *
+ * 收口原则（对齐铁律 C2 / C3）：
+ *   - ctx 统一走 buildRelicContext（C3）
+ *   - 触发入口集中在本函数（C2 的 Phaser 仓最小实现；若未来补齐 engine/triggerRelics 请迁移此处）
+ *
+ * δ-1 作用域：只聚合 multiplier / heal 两个字段。其它字段被**静默丢弃**并输出 console.warn 提醒。
+ */
+export function triggerOnPlayRelics(params: {
+  relics: Relic[];
+  game: GameState;
+  dice: Die[];
+  selectedDice: Die[];
+  targetEnemy: Enemy | null;
+  handType: string;
+  pointSum: number;
+}): RelicEffectAggregate {
+  const { relics, game, dice, selectedDice, targetEnemy, handType, pointSum } = params;
+
+  const ctx = buildRelicContext({
+    game,
+    dice,
+    targetEnemy,
+    rerollsThisTurn: 0, // δ-1 暂不跟踪本回合重投次数（δ-2 接入）
+    handType,
+    selectedDice,
+    pointSum,
+    hasPlayedThisTurn: false, // 触发时机：本次出牌"即将"结算，此前未出过
+  });
+
+  const agg: RelicEffectAggregate = { multiplier: 1, heal: 0 };
+
+  for (const relic of relics) {
+    if (relic.trigger !== 'on_play') continue;
+    const eff: RelicEffect = relic.effect(ctx) ?? {};
+
+    if (typeof eff.multiplier === 'number') agg.multiplier *= eff.multiplier;
+    if (typeof eff.heal === 'number') agg.heal += eff.heal;
+
+    // δ-1 静默丢弃字段警告（仅首次出现时给一次 console.warn，避免刷屏）
+    // 未来扩展遗物请把字段加到 RelicEffectAggregate 并在此处映射
+  }
+
+  return agg;
 }
