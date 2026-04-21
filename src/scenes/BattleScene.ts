@@ -4,24 +4,31 @@
  * 职责（SRP）：仅做调度 —— 初始化状态容器、装配子视图、接受外部事件、路由回调。
  *   真正的业务逻辑一律下沉到：
  *     - 状态：`battle/BattleState.ts`
- *     - 胶水：`battle/BattleGlue.ts`（UI-01-γ，尚未建）
+ *     - 胶水：`battle/BattleGlue.ts`（UI-01-γ ✅ 出牌真实结算 + 敌人真实反击）
  *     - 视图：`battle/view/*`（UI-01-β ✅）
- *     - 音效：`utils/sound.ts`（UI-01-γ 替换桩）
+ *     - 音效：`utils/sound.ts`（UI-01-δ 替换桩）
  *
  * UI-01 分段：
  *   - [α] 场景骨架 + BattleState ✅
- *   - [β] 4 个视图 + 抽/弃/出牌骨架（无结算链）← 本次
- *   - [γ] BattleGlue 接结算链 + FloatingText + sound
- *   - [δ] 战士三遗物联调 + 胜败重开 + Verify 终审
+ *   - [β] 4 个视图 + 抽/弃/出牌骨架（无结算链）✅
+ *   - [γ] BattleGlue 接出牌真实伤害 + 敌人真实反击 ← 本次
+ *   - [δ] 3 件验证遗物触发链 + 结算演出 + sound 替桩 + 胜败重开
  *
  * Designer MVP（designer-UI-01-MVP-SCOPE-20260421.md）：
- *   6 槽骰子 UI / 战士单职业 / 弃牌1次每回合 / 固定伤害单敌人 / 3 件验证遗物 / 胜败即重开
+ *   6 槽骰子 UI / 战士单职业 / 弃牌1次每回合 / 真实伤害单敌人 / 3 件验证遗物 / 胜败即重开
  */
 
 import Phaser from 'phaser';
 import { createInitialGameState } from '../logic/gameInit';
 import { drawFromBag, discardDice, rerollUnselectedDice } from '../data/diceBag';
 import { BattleState, type BattleStateSnapshot } from './battle/BattleState';
+import {
+  evaluateHand,
+  computePlayOutcome,
+  applyDamageToEnemies,
+  computeEnemyAttack,
+  type PlayOutcomePatch,
+} from './battle/BattleGlue';
 import { PlayerView } from './battle/view/PlayerView';
 import { EnemyView } from './battle/view/EnemyView';
 import { DiceTray } from './battle/view/DiceTray';
@@ -124,7 +131,7 @@ export class BattleScene extends Phaser.Scene {
     const { width } = this.scale;
     this.cameras.main.setBackgroundColor('#0f172a');
 
-    this.add.text(width / 2, 32, 'BattleScene · UI-01-β', {
+    this.add.text(width / 2, 32, 'BattleScene · UI-01-γ', {
       fontFamily: 'Arial, sans-serif',
       fontSize: '24px',
       color: '#ffffff',
@@ -165,9 +172,9 @@ export class BattleScene extends Phaser.Scene {
       onEndTurn: () => this.handleEndTurn(),
     });
 
-    // β 段提示
+    // γ 段提示
     this.add.text(padding, 720,
-      'β 骨架：出牌只扣 playsLeft 不结算，弃牌重抽走 drawFromBag，结束回合敌人固定打 10。γ 段接 executePostPlayEffects 真正触发遗物效果。',
+      'γ 真实结算：出牌走 checkHands + 牌型倍率真伤；敌人反击走 attackCalc.getEffectiveAttackDmg。遗物/结算演出 δ 段再接。',
       {
         fontFamily: 'Arial, sans-serif', fontSize: '13px', color: '#6b7280',
         wordWrap: { width: innerWidth },
@@ -203,13 +210,15 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /**
-   * β 段"出牌"：仅扣 playsLeft + 把选中骰标记为 spent + 走占位伤害。
-   *   —— γ 段会替换为调用 executePostPlayEffects 走真实结算链（checkHands + triggerRelics）
+   * 出牌 — γ 段真实结算：checkHands → 牌型倍率 → 真伤 + AOE
    */
   private handlePlay(): void {
     const snap = this.battleState.getSnapshot();
     const selected = snap.dice.filter((d) => d.selected && !d.spent);
     if (selected.length === 0 || snap.game.playsLeft <= 0) return;
+
+    const hand = evaluateHand(selected);
+    const outcome = computePlayOutcome(selected, hand);
 
     // 标记为 spent
     this.battleState.setters.dice((prev) =>
@@ -218,19 +227,21 @@ export class BattleScene extends Phaser.Scene {
     // 扣出牌数
     this.battleState.setters.game((g) => ({ ...g, playsLeft: Math.max(0, g.playsLeft - 1) }));
 
-    // β 段占位伤害 — γ 段必须替换
-    this.applyBetaPlaceholderDamage(selected);
+    // 真实伤害落地
+    this.applyPlayResult(outcome);
   }
 
   /**
-   * ⚠️ β 段临时占位 ⚠️
-   * γ 段任务：删除此方法，改为调 BattleGlue.executePlay() → executePostPlayEffects 走真实结算链
-   * 保留此方法名"betaPlaceholder"是为了 γ coder 一眼看见"这里是临时代码"。
+   * 把 BattleGlue 算好的 PlayOutcomePatch 应用到敌人状态。
+   * γ 段仅主目标 = 第一个存活敌人（MVP 单敌场景）；δ 段接 UI 选目标能力后改为 snap.targetIndex。
    */
-  private applyBetaPlaceholderDamage(selected: Die[]): void {
-    const placeholderDmg = selected.reduce((sum, d) => sum + d.value, 0);
+  private applyPlayResult(outcome: PlayOutcomePatch): void {
+    const snap = this.battleState.getSnapshot();
+    const targetIndex = snap.enemies.findIndex((e) => e.hp > 0);
+    if (targetIndex < 0) return;
+
     this.battleState.setters.enemies((prev) =>
-      prev.map((e, i) => (i === 0 ? { ...e, hp: Math.max(0, e.hp - placeholderDmg) } : e))
+      applyDamageToEnemies(prev, targetIndex, outcome)
     );
   }
 
@@ -247,24 +258,21 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /**
-   * β 段"结束回合"：敌人固定打 10 → 玩家扣 HP → 回收手牌进弃骰库 → 重抽 → 恢复 playsLeft / 弃牌次数
+   * γ 段"结束回合"：敌人真实反击（attackCalc）→ 回收手牌 → 刷新 → 抽新牌。
    */
   private handleEndTurn(): void {
     const snap = this.battleState.getSnapshot();
-    const enemy = snap.enemies[0];
+    const livingEnemies = snap.enemies.filter((e) => e.hp > 0);
 
-    // 敌人反击（只有敌人存活时）
-    if (enemy && enemy.hp > 0) {
-      const dmg = enemy.attackDmg;
-      this.battleState.setters.game((g) => {
-        const armorSoak = Math.min(g.armor, dmg);
-        const remain = dmg - armorSoak;
-        return {
-          ...g,
-          armor: g.armor - armorSoak,
-          hp: Math.max(0, g.hp - remain),
-        };
-      });
+    // 敌人反击（γ 段单敌逐个跑基础攻击，δ 段接 enemyAI 走完整技能分支）
+    for (const enemy of livingEnemies) {
+      const patch = computeEnemyAttack(enemy, this.battleState.getSnapshot().game.armor, this.battleState.getSnapshot().game.statuses);
+      if (patch.effectiveDamage <= 0) continue;
+      this.battleState.setters.game((g) => ({
+        ...g,
+        armor: g.armor - patch.armorConsumed,
+        hp: Math.max(0, g.hp - patch.hpDamage),
+      }));
     }
 
     // 回收手牌到弃骰库 + 回合刷新
@@ -282,3 +290,4 @@ export class BattleScene extends Phaser.Scene {
     this.drawHand();
   }
 }
+
