@@ -4,16 +4,18 @@
  * 职责（SRP）：仅做调度 —— 初始化状态容器、装配子视图、接受外部事件、路由回调。
  *   真正的业务逻辑一律下沉到：
  *     - 状态：`battle/BattleState.ts`
- *     - 胶水：`battle/BattleGlue.ts`（UI-01-γ 真实伤害 + δ-1 遗物触发链）
- *     - 视图：`battle/view/*`（UI-01-β ✅）
- *     - 音效：`utils/sound.ts`（UI-01-δ-2 替换桩）
+ *     - 胶水：`battle/BattleGlue.ts`（γ 真实伤害 + δ-1 遗物触发链）
+ *     - 视图：`battle/view/*`（β ✅）
+ *     - 演出：`battle/BattleFx.ts`（δ-2 飘字 / 闪烁 / 震屏 / 淡入）
+ *     - 音效：`utils/sound.ts`（**仍为空桩**，登记为 PHASER-SOUND-01 欠账，等 Designer 提供音源）
  *
  * UI-01 分段：
  *   - [α] 场景骨架 + BattleState ✅
  *   - [β] 4 个视图 + 抽/弃/出牌骨架（无结算链）✅
  *   - [γ] BattleGlue 接出牌真实伤害 + 敌人真实反击 ✅
- *   - [δ-1] MVP 三件遗物触发链 + 胜败闭环 ← 本次
- *   - [δ-2] 结算演出 + sound 替桩（下次）
+ *   - [δ-1] MVP 三件遗物触发链 + 胜败闭环 ✅
+ *   - [δ-2] 轻量视觉演出（伤害飘字 / 目标闪烁 / 玩家震屏 / 横幅淡入）← 本次
+ *   - [δ-3] 多敌目标选择 + enemyAI 完整链（下次）
  *
  * Designer MVP（designer-UI-01-MVP-SCOPE-20260421.md）：
  *   6 槽骰子 UI / 战士单职业 / 弃牌1次每回合 / 真实伤害单敌人 / 3 件验证遗物 / 胜败即重开
@@ -32,6 +34,12 @@ import {
   type PlayOutcomePatch,
   type RelicEffectAggregate,
 } from './battle/BattleGlue';
+import {
+  playDamageFloat,
+  flashTarget,
+  shakeOnPlayerHit,
+  fadeInBanner,
+} from './battle/BattleFx';
 import { PlayerView } from './battle/view/PlayerView';
 import { EnemyView } from './battle/view/EnemyView';
 import { DiceTray } from './battle/view/DiceTray';
@@ -138,7 +146,7 @@ export class BattleScene extends Phaser.Scene {
     const { width } = this.scale;
     this.cameras.main.setBackgroundColor('#0f172a');
 
-    this.add.text(width / 2, 32, 'BattleScene · UI-01-δ-1', {
+    this.add.text(width / 2, 32, 'BattleScene · UI-01-δ-2', {
       fontFamily: 'Arial, sans-serif',
       fontSize: '24px',
       color: '#ffffff',
@@ -179,9 +187,9 @@ export class BattleScene extends Phaser.Scene {
       onEndTurn: () => this.handleEndTurn(),
     });
 
-    // δ-1 段提示
+    // δ-2 段提示
     this.add.text(padding, 720,
-      'δ-1 遗物触发链：dimension_crush 升顺 / arithmetic_gauge 顺子倍率 / healing_breeze 回血3。胜败闭环已接入，可再战一局。',
+      'δ-2 视觉演出：命中敌人飘红字+红闪 / 玩家受击震屏+飘白字 / 回血飘绿字 / 胜败横幅淡入。音效仍为空桩，待 PHASER-SOUND-01。',
       {
         fontFamily: 'Arial, sans-serif', fontSize: '13px', color: '#6b7280',
         wordWrap: { width: innerWidth },
@@ -255,12 +263,27 @@ export class BattleScene extends Phaser.Scene {
     // 6) 伤害落地
     this.applyPlayResult(outcome);
 
+    // δ-2 演出：命中敌人飘字 + 红闪（AOE 用黄色，高倍率用紫色）
+    if (outcome.primaryDamage > 0) {
+      const center = this.enemyView.getWorldCenter();
+      const fxKind = outcome.multiplier >= 3
+        ? 'crit'
+        : outcome.isAoe
+          ? 'aoe'
+          : 'normal';
+      playDamageFloat(this, center.x, center.y, outcome.primaryDamage, fxKind);
+      flashTarget(this, this.enemyView.getContainer());
+    }
+
     // 7) 遗物回血（healing_breeze 等）— 封顶 maxHp
     if (aggregate.heal > 0) {
       this.battleState.setters.game((g) => ({
         ...g,
         hp: Math.min(g.maxHp, g.hp + aggregate.heal),
       }));
+      // δ-2 演出：玩家身上飘绿字
+      const pCenter = this.playerView.getWorldCenter();
+      playDamageFloat(this, pCenter.x, pCenter.y, aggregate.heal, 'heal');
     }
 
     // 8) 胜负检查
@@ -311,6 +334,12 @@ export class BattleScene extends Phaser.Scene {
         armor: g.armor - patch.armorConsumed,
         hp: Math.max(0, g.hp - patch.hpDamage),
       }));
+      // δ-2 演出：震屏 + 玩家身上飘白字（仅显示扣血部分，armor 吸收的不显示）
+      shakeOnPlayerHit(this);
+      if (patch.hpDamage > 0) {
+        const pCenter = this.playerView.getWorldCenter();
+        playDamageFloat(this, pCenter.x, pCenter.y, patch.hpDamage, 'normal');
+      }
     }
 
     // 战败检查（若玩家死亡则跳过回合刷新）
@@ -392,6 +421,8 @@ export class BattleScene extends Phaser.Scene {
     container.add(restartBtn);
 
     this.overBanner = container;
+    // δ-2 演出：淡入（取代硬切）
+    fadeInBanner(this, container);
   }
 
   /** 完全重置场景：Phaser scene restart 是最干净的做法（不依赖手动恢复 BattleState）。 */

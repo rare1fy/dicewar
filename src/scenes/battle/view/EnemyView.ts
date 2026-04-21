@@ -80,6 +80,21 @@ export class EnemyView {
     this.hpText.setText(`${enemy.hp} / ${enemy.maxHp}`);
   }
 
+  /**
+   * δ-2 演出用：返回敌人面板的世界坐标中心（飘字起点）
+   */
+  public getWorldCenter(): { x: number; y: number } {
+    return {
+      x: this.container.x + 60,
+      y: this.container.y + 40,
+    };
+  }
+
+  /** δ-2 演出用：暴露 container 给 FX 闪烁 */
+  public getContainer(): Phaser.GameObjects.Container {
+    return this.container;
+  }
+
   public destroy(): void {
     this.container.destroy();
   }

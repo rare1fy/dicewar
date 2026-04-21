@@ -83,6 +83,21 @@ export class PlayerView {
     this.relicsText.setText(`遗物: ${relicNames.join(' · ')}`);
   }
 
+  /**
+   * δ-2 演出用：返回玩家面板的世界坐标中心（飘字 + 回血起点）
+   */
+  public getWorldCenter(): { x: number; y: number } {
+    return {
+      x: this.container.x + 60,
+      y: this.container.y + 50,
+    };
+  }
+
+  /** δ-2 演出用：暴露 container 给 FX 闪烁 */
+  public getContainer(): Phaser.GameObjects.Container {
+    return this.container;
+  }
+
   public destroy(): void {
     this.container.destroy();
   }
