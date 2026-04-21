@@ -1,0 +1,20 @@
+{
+  "name": "dicehero-phaser",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Dice Hero - Phaser 3 版本（正式仓库）",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.3",
+    "vite": "^5.4.10"
+  }
+}
