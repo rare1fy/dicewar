@@ -44,15 +44,18 @@ import { PlayerView } from './battle/view/PlayerView';
 import { EnemyView } from './battle/view/EnemyView';
 import { DiceTray } from './battle/view/DiceTray';
 import { ActionBar } from './battle/view/ActionBar';
+import { bakeAllEnemySprites } from './battle/EnemyAssetLoader';
 import { ALL_RELICS } from '../data/relics';
 import type { Enemy, Die, Relic } from '../types/game';
 
 // MVP 硬编码敌人（Designer 方案 4-B：固定每回合 10 点伤害的训练木桩）
+// APPLY: name 从"训练木桩"换成"食尸鬼"（ENEMY_SPRITES 已有），让像素接线肉眼可验收；
+//        其余数值保持训练木桩不变（不破坏 Designer 的 MVP 数值契约）
 function buildMvpEnemy(): Enemy {
   return {
     uid: 'mvp_dummy_0',
     configId: 'mvp_dummy',
-    name: '训练木桩',
+    name: '食尸鬼',
     hp: 60,
     maxHp: 60,
     armor: 0,
@@ -122,6 +125,10 @@ export class BattleScene extends Phaser.Scene {
   create(): void {
     this.battleState = new BattleState(this.buildInitialSnapshot());
 
+    // APPLY: 开场批量烘焙敌人像素纹理（MVP 一次烤全 42 个；未来按章节改为 bakeForChapter）
+    // 注意：必须在 buildViews() 之前，否则 EnemyView.render 首帧取不到纹理会走 emoji fallback
+    bakeAllEnemySprites(this);
+
     this.buildStaticLayout();
     this.buildViews();
     this.startBgm();
@@ -139,6 +146,13 @@ export class BattleScene extends Phaser.Scene {
     // （Phaser BaseSoundManager.removeAll 只在 game destroy 时触发，不会随 scene 重启自动清）
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.stopBgm());
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.stopBgm());
+
+    // APPLY / PIXEL-ENGINE v2 WARN-2 说明：
+    //   敌人像素纹理的释放能力已在 EnemyAssetLoader.releaseAllEnemyTextures 实现，但本 MVP 暂不调用。
+    //   原因：Verify v1 查 Phaser 3.90 源码确认 Systems.shutdown 先发 SHUTDOWN 事件、此时 EnemyView.spriteImage
+    //   仍持有纹理引用，SHUTDOWN 阶段 remove 纹理存在"图像引用悬空变绿占位"的风险（WARN-NEEDS-GPT）。
+    //   本 MVP 仅一个 BattleScene，bake 有缓存命中不会累积；真正多场景切换时再切入 release（届时改到
+    //   scene.events.on('destroy') 或下一章节 preload 前批量清理更安全）。
   }
 
   // ==========================================================================
