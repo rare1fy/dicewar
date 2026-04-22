@@ -47,9 +47,6 @@ import { DiceTray } from './battle/view/DiceTray';
 import { ActionBar } from './battle/view/ActionBar';
 import { bakeAllEnemySprites } from './battle/EnemyAssetLoader';
 import { playSound } from '../utils/sound';
-// α-go 多职业 B1 拆分（2026-04-22）：原本在本文件的 MVP 硬编码敌人/遗物、BGM 管理、胜负闭环
-// 全部下沉到 battle/BattleMvpData.ts / BattleBgm.ts / BattleOutcome.ts，守住 600 行红线同时
-// 让多职业起手遗物配表独立演进（Designer 可直接改 BattleMvpData）。
 import { buildMvpEnemyForType, buildMvpRelics } from './battle/BattleMvpData';
 import type { BattleType } from './battle/BattleMvpData';
 import { showBossEntrance } from './battle/BattleBossEntrance';
@@ -595,5 +592,4 @@ export class BattleScene extends Phaser.Scene {
     }
     this.isLeavingScene = false;
   }
-}
-
+}
