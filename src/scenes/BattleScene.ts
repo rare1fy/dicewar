@@ -38,8 +38,8 @@ import {
 import {
   playDamageFloat,
   flashTarget,
-  fadeInBanner,
 } from './battle/BattleFx';
+import { showBattleGameOverBanner } from './battle/BattleGameOverBanner';
 import { runEnemyTurn, type EnemyTurnResult } from './battle/BattleTurnRunner';
 import { buildBattleAICallbacks, bridgeScreenShake } from './battle/BattleAICallbacks';
 import { PlayerView } from './battle/view/PlayerView';
@@ -94,6 +94,8 @@ export class BattleScene extends Phaser.Scene {
   // δ-3 胜败闭环：单战斗结局状态（'victory' / 'defeat' / null）+ 横幅容器
   private battleResult: 'victory' | 'defeat' | null = null;
   private overBanner: Phaser.GameObjects.Container | null = null;
+  // GAMEOVER-MVP R3 修复：3 回流按钮防重入锁，避免快速连点触发 scene.start 两次
+  private isLeavingScene: boolean = false;
 
   // δ-3d 防重入：敌人回合异步执行期间禁止再次点击"结束回合"
   private isResolvingEnemyTurn = false;
@@ -163,6 +165,12 @@ export class BattleScene extends Phaser.Scene {
     // （Phaser BaseSoundManager.removeAll 只在 game destroy 时触发，不会随 scene 重启自动清）
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.stopBgm());
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.stopBgm());
+
+    // GAMEOVER-MVP R4 修复：Phaser 3 Scene 实例复用 —— `scene.start('XXX')` 会 stop 当前 Scene
+    // 但 BattleScene 实例会被复用，`battleResult` / `overBanner` 类字段不会自动重置。
+    // 必须在 SHUTDOWN 时一次性清掉，否则玩家"换个职业"后再进战斗会因 `isBattleOver` 残留 true 被软锁。
+    // 绑在 SHUTDOWN 而非具体回流方法，DRY 守住所有当前与未来的离开路径。
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.resetBattleResultState());
 
     // APPLY / PIXEL-ENGINE v2 WARN-2 说明：
     //   敌人像素纹理的释放能力已在 EnemyAssetLoader.releaseAllEnemyTextures 实现，但本 MVP 暂不调用。
@@ -530,53 +538,60 @@ export class BattleScene extends Phaser.Scene {
     return false;
   }
 
-  /** 全屏半透明遮罩 + 结局文字 + "再战一局" 按钮。 */
+  /**
+   * 全屏半透明遮罩 + 结局文字 + 3 按钮回流（再战 / 换职业 / 回首屏）。
+   * GAMEOVER-MVP：堵死胜败后胡同，给玩家三条明确出路。横幅本体实现下沉至 BattleGameOverBanner.ts。
+   */
   private showOverBanner(title: string, titleColor: string): void {
     if (this.overBanner) return; // 防重入
-    const { width, height } = this.scale;
 
     // SFX: 胜利琶音 / 失败降调（按 title 字符串路由，避免新增一个独立参数）
     playSound(title === '胜利' ? 'victory' : 'death');
 
-    const container = this.add.container(0, 0).setDepth(1000);
-
-    const shade = this.add.rectangle(0, 0, width, height, 0x000000, 0.65)
-      .setOrigin(0, 0);
-    container.add(shade);
-
-    const titleText = this.add.text(width / 2, height / 2 - 60, title, {
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '72px',
-      color: titleColor,
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    container.add(titleText);
-
-    const restartBtn = this.add.text(width / 2, height / 2 + 40, '再战一局', {
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '22px',
-      color: '#ffffff',
-      backgroundColor: '#2563eb',
-      padding: { x: 20, y: 10 },
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    restartBtn.on('pointerdown', () => this.restartBattle());
-    container.add(restartBtn);
-
-    this.overBanner = container;
-    // δ-2 演出：淡入（取代硬切）
-    fadeInBanner(this, container);
+    this.overBanner = showBattleGameOverBanner(this, title, titleColor, {
+      onRestart: () => this.restartBattle(),
+      onBackToClassSelect: () => this.backToClassSelect(),
+      onBackToStart: () => this.backToStart(),
+    });
   }
 
   /** 完全重置场景：Phaser scene restart 是最干净的做法（不依赖手动恢复 BattleState）。 */
   private restartBattle(): void {
+    if (this.isLeavingScene) return; // R3 修复：防重入（快速连点 3 按钮）
+    this.isLeavingScene = true;
+    // BGM 显式清理（SHUTDOWN 事件会再兜底一次，幂等安全；resetBattleResultState 也在 SHUTDOWN 触发）
+    this.stopBgm();
+    this.scene.restart();
+  }
+
+  /** 回职业选择：允许玩家换个职业重开；BGM 与战斗态由 SHUTDOWN 兜底清理。 */
+  private backToClassSelect(): void {
+    if (this.isLeavingScene) return;
+    this.isLeavingScene = true;
+    this.stopBgm();
+    this.scene.start('ClassSelectScene');
+  }
+
+  /** 回首屏：彻底退出本局；BGM 与战斗态由 SHUTDOWN 兜底清理。 */
+  private backToStart(): void {
+    if (this.isLeavingScene) return;
+    this.isLeavingScene = true;
+    this.stopBgm();
+    this.scene.start('StartScene');
+  }
+
+  /**
+   * 战斗结算态一次性复位：挂在 SHUTDOWN 事件统一触发，
+   * 保护所有离开路径（restart / 换职业 / 回首屏 / 未来其他）。
+   * Phaser 3 SceneManager 复用 Scene 实例，类字段必须显式复位。
+   */
+  private resetBattleResultState(): void {
     this.battleResult = null;
     if (this.overBanner) {
       this.overBanner.destroy();
       this.overBanner = null;
     }
-    // BGM 显式清理（SHUTDOWN 事件会再兜底一次，幂等安全）
-    this.stopBgm();
-    this.scene.restart();
+    this.isLeavingScene = false;
   }
 }
 
