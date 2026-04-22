@@ -3,19 +3,18 @@
  *
  * 职责：
  *   - 骰子选择切换
- *   - 出牌按钮点击
- *   - 弃牌按钮点击
- *   - 结束回合按钮点击
+ *   - 出牌前置检查 + 结算链（evaluateHand → triggerRelics → computeOutcome）
+ *   - 弃牌前置检查 + 重骰
+ *   - 结束回合前置检查 + 委托
  *
- * 设计：Scene 将 InputHandler 实例绑定给各 View 回调，
- *      Handler 内部做前置检查（能否出牌？能否弃牌？战斗结束没？），
- *      通过把柄（bound 方法）触发实际业务逻辑。
+ * 设计：Scene 传入 SceneDeps（演出 + 胜负判定的薄回调），
+ *      Handler 负责所有"能不能做"的前置守卫和"算出什么"的纯逻辑，
+ *      Scene 只负责"演什么"和"判什么"。
  *
  * @module battle/BattleInputHandler
  */
 
 import type { BattleState } from './BattleState';
-import type { Die } from '../../types/game';
 import {
   evaluateHand,
   computePlayOutcome,
@@ -23,17 +22,17 @@ import {
   type RelicEffectAggregate,
   type PlayOutcomePatch,
 } from './BattleGlue';
+import { applyDamageToEnemies } from './BattleGlue';
 import { rerollUnselectedDice } from '../../data/diceBag';
 import { playSound } from '../../utils/sound';
 
-/** 输入处理器依赖的上下文 */
-export interface InputHandlerDeps {
+/** Scene 注入的演出 + 胜负判定回调 */
+export interface SceneDeps {
   battleState: BattleState;
-  getPlaysLeft: () => number;
-  getDiscardLeft: () => number;
   isBattleOver: () => boolean;
-  consumePlay: (outcome: PlayOutcomePatch, aggregate: RelicEffectAggregate) => void;
-  onDiscard: (afterReroll: Die[]) => void;
+  /** 出牌后：应用伤害 + 视觉演出 + 胜负判定 */
+  onPlayResolved: (outcome: PlayOutcomePatch, aggregate: RelicEffectAggregate) => void;
+  /** 结束回合请求（Scene 处理异步敌人回合） */
   onEndTurnRequest: () => void;
 }
 
@@ -42,20 +41,24 @@ export interface InputHandlerDeps {
  * 前置检查在此完成，避免 Scene 中写重复 if。
  */
 export class BattleInputHandler {
-  private deps: InputHandlerDeps;
+  private deps: SceneDeps;
 
-  constructor(deps: InputHandlerDeps) {
+  constructor(deps: SceneDeps) {
     this.deps = deps;
   }
 
-  /** 切换骰子选中状态（允许任意时刻切换，包括战斗结束后查看） */
+  /** 切换骰子选中状态 */
   toggleDieSelection(dieId: number): void {
     this.deps.battleState.setters.dice((prev) =>
       prev.map((d) => (d.id === dieId ? { ...d, selected: !d.selected } : d))
     );
   }
 
-  /** 出牌 — 含完整前置检查与结算链 */
+  /**
+   * 出牌 — 完整结算链：
+   *   evaluateHand → triggerOnPlayRelics → computePlayOutcome
+   *   → mark spent + decrement playsLeft → applyDamage → delegate to Scene for FX
+   */
   handlePlay(): void {
     if (this.deps.isBattleOver()) return;
 
@@ -63,7 +66,7 @@ export class BattleInputHandler {
     const selected = snap.dice.filter((d) => d.selected && !d.spent);
     if (selected.length === 0 || snap.game.playsLeft <= 0) return;
 
-    // SFX: 出牌启动音
+    // SFX
     playSound('play');
 
     // 1) 牌型判定
@@ -85,7 +88,7 @@ export class BattleInputHandler {
     // 3) 计算伤害
     const outcome = computePlayOutcome(selected, hand, snap.game, aggregate);
 
-    // 4) 标记 spent
+    // 4) 标 spent
     this.deps.battleState.setters.dice((prev) =>
       prev.map((d) => (d.selected && !d.spent ? { ...d, spent: true, selected: false } : d))
     );
@@ -93,25 +96,30 @@ export class BattleInputHandler {
     // 5) 扣出牌数
     this.deps.battleState.setters.game((g) => ({ ...g, playsLeft: Math.max(0, g.playsLeft - 1) }));
 
-    // 6) 消费结果（Scene 处理：应用伤害 + 演出 + 胜负判定）
-    this.deps.consumePlay(outcome, aggregate);
+    // 6) 伤害落地（纯状态更新）
+    const targetIndex = snap.enemies.findIndex((e) => e.hp > 0);
+    if (targetIndex >= 0) {
+      this.deps.battleState.setters.enemies((prev) =>
+        applyDamageToEnemies(prev, targetIndex, outcome)
+      );
+    }
+
+    // 7) 委托 Scene 做演出 + 遗物回血 + 胜负判定
+    this.deps.onPlayResolved(outcome, aggregate);
   }
 
-  /** 弃牌重骰 — MVP 每回合 1 次 */
+  /** 弃牌重骰 — 每回合 1 次 */
   handleDiscard(): void {
     if (this.deps.isBattleOver()) return;
 
     const snap = this.deps.battleState.getSnapshot();
     if (snap.discardLeft <= 0) return;
 
-    const afterReroll = rerollUnselectedDice(snap.dice);
-    this.deps.battleState.setters.dice(afterReroll);
+    this.deps.battleState.setters.dice((prev) => rerollUnselectedDice(prev));
     this.deps.battleState.setters.discardLeft((n) => Math.max(0, n - 1));
-
-    this.deps.onDiscard(afterReroll);
   }
 
-  /** 结束回合 — 前置检查走 BattleState */
+  /** 结束回合 — 前置检查后委托 Scene */
   handleEndTurn(): void {
     if (this.deps.isBattleOver()) return;
 

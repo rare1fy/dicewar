@@ -25,13 +25,8 @@
 
 import Phaser from 'phaser';
 import { createInitialGameState } from '../logic/gameInit';
-import { drawFromBag, discardDice, rerollUnselectedDice } from '../data/diceBag';
 import { BattleState, type BattleStateSnapshot } from './battle/BattleState';
 import {
-  evaluateHand,
-  computePlayOutcome,
-  applyDamageToEnemies,
-  triggerOnPlayRelics,
   type PlayOutcomePatch,
   type RelicEffectAggregate,
 } from './battle/BattleGlue';
@@ -60,11 +55,14 @@ import {
 } from './battle/BattleBgm';
 import { checkBattleOver as checkBattleOverShared, showOverBanner as showOverBannerShared, type BattleOutcomeContext } from './battle/BattleOutcome';
 import type { Die, ClassId } from '../types/game';
+import { BattleInputHandler } from './battle/BattleInputHandler';
+import { drawHandLogic, playDrawSfx, recycleAndRefresh } from './battle/BattleFlow';
 
 // （MVP 数据已下沉到 BattleMvpData.ts）
 
 export class BattleScene extends Phaser.Scene {
   private battleState!: BattleState;
+  private inputHandler!: BattleInputHandler;
 
   private playerView!: PlayerView;
   private enemyView!: EnemyView;
@@ -125,6 +123,14 @@ export class BattleScene extends Phaser.Scene {
 
   create(): void {
     this.battleState = new BattleState(this.buildInitialSnapshot());
+
+    // 初始化输入处理器（出牌/弃牌/选骰 逻辑已下沉 BattleInputHandler）
+    this.inputHandler = new BattleInputHandler({
+      battleState: this.battleState,
+      isBattleOver: () => this.isBattleOver(),
+      onPlayResolved: (outcome, aggregate) => this.onPlayResolved(outcome, aggregate),
+      onEndTurnRequest: () => this.handleEndTurn(),
+    });
 
     // APPLY: 开场批量烘焙敌人像素纹理（MVP 一次烤全 42 个；未来按章节改为 bakeForChapter）
     // 注意：必须在 buildViews() 之前，否则 EnemyView.render 首帧取不到纹理会走 emoji fallback
@@ -244,17 +250,17 @@ export class BattleScene extends Phaser.Scene {
     this.enemyView = new EnemyView(this, { x: padding, y: 80, width: innerWidth });
     // 玩家在中
     this.playerView = new PlayerView(this, { x: padding, y: 240, width: innerWidth });
-    // 骰盘
+    // 骰盘 — 回调委托给 BattleInputHandler
     this.diceTray = new DiceTray(this, {
       x: padding, y: 460, width: innerWidth, slotCount: 6,
-      onToggle: (dieId) => this.toggleDieSelection(dieId),
+      onToggle: this.inputHandler.onToggleDie,
     });
-    // 按钮栏
+    // 按钮栏 — 回调委托给 BattleInputHandler
     this.actionBar = new ActionBar(this, {
       x: padding, y: 620, width: innerWidth,
-      onPlay: () => this.handlePlay(),
-      onDiscard: () => this.handleDiscard(),
-      onEndTurn: () => this.handleEndTurn(),
+      onPlay: this.inputHandler.onPlay,
+      onDiscard: this.inputHandler.onDiscard,
+      onEndTurn: this.inputHandler.onEndTurn,
     });
 
     // δ-2 段提示
@@ -299,72 +305,30 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ==========================================================================
-  // 交互逻辑（β 段占位，γ 段替换为真实胶水）
+  // 交互逻辑 — Scene 侧仅保留演出 + 异步回合控制
+  // （出牌/弃牌/选骰的纯逻辑已下沉 BattleInputHandler）
   // ==========================================================================
-  private toggleDieSelection(dieId: number): void {
-    this.battleState.setters.dice((prev) =>
-      prev.map((d) => (d.id === dieId ? { ...d, selected: !d.selected } : d))
-    );
-  }
 
-  /**
-   * 抽牌 — 每回合开始时调，β 段直接用 drawFromBag
-   */
+  /** drawHand — delegate to BattleFlow.drawHandLogic + playDrawSfx */
   private drawHand(): void {
     const snap = this.battleState.getSnapshot();
     const { game } = snap;
-    const { drawn, newBag, newDiscard } = drawFromBag(game.diceBag, game.discardPile, game.drawCount);
-
-    this.battleState.setters.dice(drawn);
+    const { dice, newBag, newDiscard } = drawHandLogic(
+      game.diceBag,
+      game.discardPile,
+      game.drawCount
+    );
+    this.battleState.setters.dice(dice);
     this.battleState.setters.game((g) => ({ ...g, diceBag: newBag, discardPile: newDiscard }));
-
-    // SFX: 骰子落盘（Web Audio 合成）
-    playSound('roll');
+    playDrawSfx();
   }
 
   /**
-   * 出牌 — δ-1 真实结算链：
-   *   evaluateHand(含 straightUpgrade) → triggerOnPlayRelics(聚合) → computePlayOutcome(合并 multiplier) → 应用伤害+heal → 判胜负
+   * 出牌后演出 + 回血 + 胜负判定 — 由 BattleInputHandler.onPlayResolved 委托。
+   * 纯状态变更（伤害落地/标spent/扣出牌数）已在 InputHandler 内完成。
    */
-  private handlePlay(): void {
-    const snap = this.battleState.getSnapshot();
-    const selected = snap.dice.filter((d) => d.selected && !d.spent);
-    if (selected.length === 0 || snap.game.playsLeft <= 0) return;
-    if (this.isBattleOver()) return;
-
-    // SFX: 出牌启动音（牌型判定前触发，给玩家即时反馈）
-    playSound('play');
-
-    // 1) 牌型判定（注入遗物 straightUpgrade）
-    const hand = evaluateHand(selected, snap.game.relics);
-
-    // 2) 遗物 on_play 聚合（multiplier / heal / bonusDamage）
-    const pointSum = selected.reduce((s, d) => s + d.value, 0);
-    const targetEnemy = snap.enemies.find((e) => e.hp > 0) ?? null;
-    const aggregate: RelicEffectAggregate = triggerOnPlayRelics({
-      relics: snap.game.relics,
-      game: snap.game,
-      dice: snap.dice,
-      selectedDice: selected,
-      hand,
-      targetEnemy,
-      pointSum,
-    });
-
-    // 3) 合并倍率算出伤害分布
-    const outcome = computePlayOutcome(selected, hand, snap.game, aggregate);
-
-    // 4) 标 spent
-    this.battleState.setters.dice((prev) =>
-      prev.map((d) => (d.selected && !d.spent ? { ...d, spent: true, selected: false } : d))
-    );
-    // 5) 扣出牌数
-    this.battleState.setters.game((g) => ({ ...g, playsLeft: Math.max(0, g.playsLeft - 1) }));
-
-    // 6) 伤害落地
-    this.applyPlayResult(outcome);
-
-    // δ-2 演出：命中敌人飘字 + 红闪（AOE 用黄色，高倍率用紫色）
+  private onPlayResolved(outcome: PlayOutcomePatch, aggregate: RelicEffectAggregate): void {
+    // δ-2 演出：命中敌人飘字 + 红闪
     if (outcome.primaryDamage > 0) {
       const center = this.enemyView.getWorldCenter();
       const fxKind = outcome.multiplier >= 3
@@ -374,51 +338,22 @@ export class BattleScene extends Phaser.Scene {
           : 'normal';
       playDamageFloat(this, center.x, center.y, outcome.primaryDamage, fxKind);
       flashTarget(this, this.enemyView.getContainer());
-      // SFX: 高倍率用 critical、普通命中用 hit（与飘字 fxKind 呼应）
       playSound(outcome.multiplier >= 3 ? 'critical' : 'hit');
     }
 
-    // 7) 遗物回血（healing_breeze 等）— 封顶 maxHp
+    // 遗物回血 — 封顶 maxHp
     if (aggregate.heal > 0) {
       this.battleState.setters.game((g) => ({
         ...g,
         hp: Math.min(g.maxHp, g.hp + aggregate.heal),
       }));
-      // δ-2 演出：玩家身上飘绿字
       const pCenter = this.playerView.getWorldCenter();
       playDamageFloat(this, pCenter.x, pCenter.y, aggregate.heal, 'heal');
-      // SFX: 遗物回血
       playSound('heal');
     }
 
-    // 8) 胜负检查
+    // 胜负检查
     this.checkBattleOver();
-  }
-
-  /**
-   * 把 BattleGlue 算好的 PlayOutcomePatch 应用到敌人状态。
-   * γ 段仅主目标 = 第一个存活敌人（MVP 单敌场景）；δ 段接 UI 选目标能力后改为 snap.targetIndex。
-   */
-  private applyPlayResult(outcome: PlayOutcomePatch): void {
-    const snap = this.battleState.getSnapshot();
-    const targetIndex = snap.enemies.findIndex((e) => e.hp > 0);
-    if (targetIndex < 0) return;
-
-    this.battleState.setters.enemies((prev) =>
-      applyDamageToEnemies(prev, targetIndex, outcome)
-    );
-  }
-
-  /**
-   * β 段"弃牌重抽"：未选中的骰子重骰（不消耗 diceBag），每回合 1 次。
-   * γ-0 拆分：使用 BattleState 专属 discardLeft 字段，不污染 GameState.freeRerollsLeft（其被 buildRelicContext 消费）。
-   */
-  private handleDiscard(): void {
-    const snap = this.battleState.getSnapshot();
-    if (snap.discardLeft <= 0) return;
-
-    this.battleState.setters.dice((prev) => rerollUnselectedDice(prev));
-    this.battleState.setters.discardLeft((n) => Math.max(0, n - 1));
   }
 
   /**
@@ -462,18 +397,10 @@ export class BattleScene extends Phaser.Scene {
           return; // 战斗结束，不刷新抽牌
         }
 
-        // 战斗继续：回收手牌到弃骰库 + 回合刷新
-        // 注：battleTurn 已由 executeEnemyTurn 内部步骤7推进，此处不重复
-        const currentDice = this.battleState.getSnapshot().dice;
-        this.battleState.setters.game((g) => ({
-          ...g,
-          discardPile: discardDice(currentDice, g.discardPile),
-          playsLeft: g.maxPlays,
-        }));
-        // 恢复弃牌次数（UI 层专属字段，独立于 GameState）
-        this.battleState.setters.discardLeft(this.battleState.getSnapshot().discardsPerTurn);
+        // Battle continues: recycle hand + refresh turn via BattleFlow
+        recycleAndRefresh(this.battleState, this.battleState.getSnapshot().dice);
 
-        // 抽新手牌
+        // Draw new hand
         this.drawHand();
       })
       .catch((err) => {
