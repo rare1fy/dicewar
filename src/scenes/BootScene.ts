@@ -76,6 +76,16 @@ export class BootScene extends Phaser.Scene {
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     toBattleBtn.on("pointerdown", () => this.scene.start("BattleScene"));
 
+    // 进入职业选择场景（α-go 第 2 单开发验证入口）
+    const toClassBtn = this.add.text(centerX, this.scale.height - 100, "→ 职业选择 (α-go)", {
+      fontFamily: "Arial, sans-serif",
+      fontSize: "24px",
+      color: "#ffffff",
+      backgroundColor: "#2563eb",
+      padding: { x: 18, y: 10 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    toClassBtn.on("pointerdown", () => this.scene.start("ClassSelectScene"));
+
     // 返回开始界面（StartScene 已作为首屏；此处保留回流入口，方便调试来回切换）
     const backToStart = this.add.text(centerX, 100, "← 返回开始界面", {
       fontFamily: "Arial, sans-serif",

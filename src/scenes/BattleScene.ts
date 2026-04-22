@@ -49,7 +49,7 @@ import { ActionBar } from './battle/view/ActionBar';
 import { bakeAllEnemySprites } from './battle/EnemyAssetLoader';
 import { playSound } from '../utils/sound';
 import { ALL_RELICS } from '../data/relics';
-import type { Enemy, Die, Relic } from '../types/game';
+import type { Enemy, Die, Relic, ClassId } from '../types/game';
 
 // MVP 硬编码敌人（Designer 方案 4-B：固定每回合 10 点伤害的训练木桩）
 // APPLY: name 从"训练木桩"换成"食尸鬼"（ENEMY_SPRITES 已有），让像素接线肉眼可验收；
@@ -101,8 +101,22 @@ export class BattleScene extends Phaser.Scene {
   // BGM 句柄（preload 成功后持有，scene shutdown 时显式清理避免叠播）
   private bgm: Phaser.Sound.BaseSound | null = null;
 
+  // α-go 第 2 单：从 ClassSelectScene 注入的职业 id（未注入时回落 'warrior' 保留单测/直启路径）
+  private classId: ClassId = 'warrior';
+
   constructor() {
     super('BattleScene');
+  }
+
+  /**
+   * Phaser Scene 生命周期：scene.start('BattleScene', { classId }) 传参走这里。
+   * 必须在 preload / create 之前执行；若未传 classId（直启 / 调试路径），**回到 warrior 默认**而非继承上一次。
+   *
+   * Verify PHASER-SCENE-CLASS-SELECT / R1+R2 修复：
+   *   原实现只有"带参时覆盖"，未处理 else → 连续两次不同职业进入时会静默泄漏上一次职业。
+   */
+  init(data: { classId?: ClassId } | undefined): void {
+    this.classId = (data && data.classId) ? data.classId : 'warrior';
   }
 
   /**
@@ -162,7 +176,7 @@ export class BattleScene extends Phaser.Scene {
   // 初始化快照
   // ==========================================================================
   private buildInitialSnapshot(): BattleStateSnapshot {
-    const game = createInitialGameState('warrior');
+    const game = createInitialGameState(this.classId);
     game.relics = buildMvpRelics();
 
     const initialDice: Die[] = [];

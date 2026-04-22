@@ -174,10 +174,9 @@ export class StartScene extends Phaser.Scene {
   }
 
   private onStartPress(): void {
-    // TODO(PHASER-SCENE-CLASS-SELECT)：ClassSelect 场景就位后替换为 'ClassSelectScene'
-    // MVP 阶段直接跳 BattleScene，保证点击有反馈、链路可玩
+    // α-go 第 2 单：ClassSelect 已就位，主按钮跳转目标切换到职业选择
     this.stopBgm();
-    this.scene.start('BattleScene');
+    this.scene.start('ClassSelectScene');
   }
 
   private startBgm(): void {

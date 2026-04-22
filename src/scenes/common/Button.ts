@@ -67,8 +67,14 @@ const PALETTES: Record<ButtonVariant, VariantPalette> = {
 /**
  * 创建一个像素风按钮 Container，（0,0）为容器中心点。
  * 调用方用 container.setPosition(x, y) 定位即可。
+ *
+ * 返回值同时把 container 挂到 container.setLabelText 上，供调用方切换文案
+ * （避免外部用 container.list[1] 索引硬耦合内部装配顺序 —— Verify 修复）。
  */
-export function createButton(scene: Phaser.Scene, options: ButtonOptions): Phaser.GameObjects.Container {
+export function createButton(
+  scene: Phaser.Scene,
+  options: ButtonOptions,
+): Phaser.GameObjects.Container & { setLabelText: (text: string) => void } {
   const width = options.width ?? 220;
   const height = options.height ?? 48;
   const variant = options.variant ?? 'primary';
@@ -131,5 +137,11 @@ export function createButton(scene: Phaser.Scene, options: ButtonOptions): Phase
     scene.game.canvas.style.cursor = 'default';
   });
 
-  return container;
+  // 对外暴露稳定的文案切换 API，避免调用方依赖 container.list[n] 索引耦合
+  const decorated = container as Phaser.GameObjects.Container & { setLabelText: (text: string) => void };
+  decorated.setLabelText = (text: string) => {
+    label.setText(text);
+  };
+
+  return decorated;
 }
