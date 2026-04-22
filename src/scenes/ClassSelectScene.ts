@@ -17,6 +17,7 @@
  */
 
 import Phaser from 'phaser';
+import { initRunState } from './hud/GlobalHudBar';
 import { CLASS_DEFS, type ClassId } from '../data/classes';
 import { bakeAllPixelDice, pixelDiceKey } from './common/PixelDiceIcon';
 import { createButton } from './common/Button';
@@ -327,6 +328,8 @@ export class ClassSelectScene extends Phaser.Scene {
         // (3) α-go 第 6 单 LOOT：顺手清 runRelics，保证新局的 BattleScene.buildInitialSnapshot
         //     走"按职业的 starter relic"分支，而不是继承上一局的累积遗物池。
         this.registry.remove('runRelics');
+        // α-go 第 8 单 HUD：按选中职业初始化 run 的 hp/maxHp/gold（relics 已于上一行清）
+        initRunState(this, classId);
         this.scene.start('MapScene', { classId, newRun: true });
       },
     });

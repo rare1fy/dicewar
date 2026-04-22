@@ -22,7 +22,8 @@ import Phaser from 'phaser';
 import { LootCard } from './loot/LootCard';
 import { pickLootCandidates } from './loot/LootPicker';
 import { playSound } from '../utils/sound';
-import type { Relic } from '../types/game';
+import type { Relic, ClassId } from '../types/game';
+import { GlobalHudBar, readRunState } from './hud/GlobalHudBar';
 
 interface LootSceneData {
   classId?: string;
@@ -32,6 +33,8 @@ export class LootScene extends Phaser.Scene {
   private classId: string = 'warrior';
   private cards: LootCard[] = [];
   private isLeaving: boolean = false;
+  // α-go 第 8 单 HUD：只读展示，本场景不改 registry HP/gold
+  private hudBar: GlobalHudBar | null = null;
 
   constructor() {
     super('LootScene');
@@ -45,9 +48,19 @@ export class LootScene extends Phaser.Scene {
 
   create(): void {
     this.drawBackground();
+    // HUD 全局顶部栏：readRunState 从 registry 读最新 HP/maxHp/gold/relics 渲染
+    this.hudBar = new GlobalHudBar(this, readRunState(this, this.classId as ClassId));
     this.drawTitle();
     this.drawCards();
     this.drawSkipButton();
+
+    // SHUTDOWN 清 HUD（registry key 不动，留给下一场景继续读）
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (this.hudBar) {
+        this.hudBar.destroy();
+        this.hudBar = null;
+      }
+    });
   }
 
   // ==========================================================================
@@ -152,6 +165,11 @@ export class LootScene extends Phaser.Scene {
     // append 到 runRelics
     const prev = (this.registry.get('runRelics') as Relic[] | undefined) ?? [];
     this.registry.set('runRelics', [...prev, relic]);
+
+    // α-go 第 8 单 HUD：遗物已入池，立刻刷新 HUD 给玩家反馈"我获得了这件"
+    if (this.hudBar) {
+      this.hudBar.update(readRunState(this, this.classId as ClassId));
+    }
 
     playSound('relic');
 

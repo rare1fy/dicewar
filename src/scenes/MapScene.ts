@@ -33,8 +33,10 @@
 
 import Phaser from 'phaser';
 import type { MapNode, NodeType } from '../types/game';
+import type { ClassId } from '../types/game';
 import { generateMap, getNodeX } from '../utils/mapGenerator';
 import { playSound } from '../utils/sound';
+import { GlobalHudBar, readRunState, resetRunState } from './hud/GlobalHudBar';
 
 /** 节点视觉配置：颜色 + 半径 + label（按 NodeType 路由） */
 const NODE_STYLE: Record<NodeType, { color: number; radius: number; label: string }> = {
@@ -68,6 +70,9 @@ interface MapSceneData {
 }
 
 export class MapScene extends Phaser.Scene {
+  // α-go 第 8 单 HUD：全局顶部栏（HP/金币/遗物）；构造于 create，销毁于 SHUTDOWN
+  private hudBar: GlobalHudBar | null = null;
+
   private classId: string = 'warrior';
   private nodes: MapNode[] = [];
   /** 当前玩家所在节点 ID；null 表示还未踏入（初始状态：任一 depth=0 节点都可选） */
@@ -111,6 +116,9 @@ export class MapScene extends Phaser.Scene {
       this.nodes = generateMap();
     }
     this.drawBackground();
+    // HUD 全局顶部栏：放在业务顶栏之前渲染，保证 HUD 在最顶
+    //   readRunState 若 registry 缺失 → 按 classId 回退 maxHp 默认值（首场合理）
+    this.hudBar = new GlobalHudBar(this, readRunState(this, this.classId as ClassId));
     this.drawTopBar();
     this.drawEdges();
     this.drawNodes();
@@ -120,6 +128,16 @@ export class MapScene extends Phaser.Scene {
 
     // wake 事件保留监听（将来做 sleep/run 软切时用，当前路径不会触发）
     this.events.on(Phaser.Scenes.Events.WAKE, this.onWake, this);
+
+    // α-go 第 8 单 HUD：SHUTDOWN 时释放 HUD + 解绑 WAKE 监听，避免 Scene 复用实例累积
+    //   Verify A-2 修复：现有 WAKE 监听每次 create 都 on 一次无 off，Scene 实例复用会堆积
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.events.off(Phaser.Scenes.Events.WAKE, this.onWake, this);
+      if (this.hudBar) {
+        this.hudBar.destroy();
+        this.hudBar = null;
+      }
+    });
     // 注意：MapScene 不绑 SHUTDOWN 清 registry —— 因为 scene.start('BattleScene') 会 stop MapScene
     // 触发 SHUTDOWN，此时 pendingBattleNodeId 正在协议中不能清。
     // registry 清理唯一时机是战果消费完成后（见 consumeBattleResultIfAny 末尾的 remove）。
@@ -134,24 +152,25 @@ export class MapScene extends Phaser.Scene {
     vignette.fillRect(0, 0, width, height * 0.25);
   }
 
-  /** 顶栏：当前职业 + 返回选职业按钮（MVP 先不做存档，点回直接重开） */
+  /** 顶栏：当前职业 + 返回选职业按钮（MVP 先不做存档，点回直接重开）
+   *  α-go 第 8 单 HUD：全局 HUD 占位 y=0-44，本业务顶栏下移到 y=54 起避让。 */
   private drawTopBar(): void {
     const classLabel = this.classId === 'warrior' ? '战士'
                     : this.classId === 'mage' ? '法师'
                     : this.classId === 'rogue' ? '盗贼' : this.classId;
-    this.add.text(24, 20, `职业：${classLabel}`, {
+    this.add.text(24, 54, `职业：${classLabel}`, {
       fontFamily: 'Arial, sans-serif',
       fontSize: '20px',
       color: '#e5e7eb',
     });
-    this.add.text(this.scale.width / 2, 20, '征途之路', {
+    this.add.text(this.scale.width / 2, 54, '征途之路', {
       fontFamily: 'Arial, sans-serif',
       fontSize: '22px',
       color: '#fbbf24',
       fontStyle: 'bold',
     }).setOrigin(0.5, 0);
 
-    const backBtn = this.add.text(this.scale.width - 24, 20, '换职业', {
+    const backBtn = this.add.text(this.scale.width - 24, 54, '换职业', {
       fontFamily: 'Arial, sans-serif',
       fontSize: '16px',
       color: '#ffffff',
@@ -160,6 +179,8 @@ export class MapScene extends Phaser.Scene {
     }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
     backBtn.on('pointerdown', () => {
       if (this.isEnteringBattle) return;
+      // Verify A-1 修复：换职业等于"弃掉当前 run"，清 runState 避免旧局 HP/maxHp/gold 污染新局
+      resetRunState(this);
       this.scene.start('ClassSelectScene');
     });
   }

@@ -53,6 +53,7 @@ import { playSound } from '../utils/sound';
 import { buildMvpEnemyForType, buildMvpRelics } from './battle/BattleMvpData';
 import type { BattleType } from './battle/BattleMvpData';
 import { showBossEntrance } from './battle/BattleBossEntrance';
+import { GlobalHudBar, readRunState, writeRunHp, initRunState } from './hud/GlobalHudBar';
 import {
   preloadBattleBgm,
   startBattleBgm,
@@ -97,6 +98,9 @@ export class BattleScene extends Phaser.Scene {
    */
   private battleType: BattleType = 'normal';
 
+  // α-go 第 8 单 HUD：战斗中实时同步 BattleState.game.hp 到顶部 HUD
+  private hudBar: GlobalHudBar | null = null;
+
   constructor() {
     super('BattleScene');
   }
@@ -132,8 +136,10 @@ export class BattleScene extends Phaser.Scene {
     this.buildStaticLayout();
     this.buildViews();
 
-    // 订阅刷新所有视图（在 startBattleFlow 之前挂载，保证第一次 renderAllViews 有订阅者）
-    this.battleState.subscribe((snap) => this.renderAllViews(snap));
+    // α-go 第 8 单 HUD：挂顶部栏（R-1 直启路径 懒初始化 runState 保证 HUD maxHp 与 BattleState 一致）
+    if (this.registry.get('runMaxHp') == null) initRunState(this, this.classId);
+    this.hudBar = new GlobalHudBar(this, readRunState(this, this.classId));
+    this.battleState.subscribe((snap) => { this.renderAllViews(snap); this.syncHud(snap); });
     // δ-3d：注册震屏桥——enemyAI 内部 setScreenShake(true) 上升沿触发一次 shakeOnPlayerHit
     bridgeScreenShake(this, this.battleState);
     this.renderAllViews(this.battleState.getSnapshot());
@@ -212,20 +218,21 @@ export class BattleScene extends Phaser.Scene {
     const { width } = this.scale;
     this.cameras.main.setBackgroundColor('#0f172a');
 
-    this.add.text(width / 2, 32, 'BattleScene · UI-01-δ-2', {
+    // α-go 第 8 单 HUD：顶部 y=0-44 给 GlobalHudBar 占据；debug 标题 + 返回按钮下移到 y=54 避让
+    this.add.text(width / 2, 62, 'BattleScene · UI-01-δ-2', {
       fontFamily: 'Arial, sans-serif',
-      fontSize: '24px',
+      fontSize: '20px',
       color: '#ffffff',
     }).setOrigin(0.5);
 
-    const backBtn = this.add.text(20, 20, '← 返回', {
+    const backBtn = this.add.text(20, 54, '← 返回地图', {
       fontFamily: 'Arial, sans-serif',
-      fontSize: '18px',
+      fontSize: '16px',
       color: '#60a5fa',
       backgroundColor: '#1f2937',
       padding: { x: 10, y: 4 },
     }).setInteractive({ useHandCursor: true });
-    backBtn.on('pointerdown', () => this.scene.start('BootScene'));
+    backBtn.on('pointerdown', () => this.backToMap());
   }
 
   // ==========================================================================
@@ -260,6 +267,17 @@ export class BattleScene extends Phaser.Scene {
         fontFamily: 'Arial, sans-serif', fontSize: '13px', color: '#6b7280',
         wordWrap: { width: innerWidth },
       });
+  }
+
+  /** α-go 第 8 单 HUD：把 BattleState 快照推到顶部 HUD；gold 暂从 registry 读 */
+  private syncHud(snap: Readonly<BattleStateSnapshot>): void {
+    if (!this.hudBar) return;
+    this.hudBar.update({
+      hp: snap.game.hp,
+      maxHp: snap.game.maxHp,
+      gold: (this.registry.get('runGold') as number | undefined) ?? 0,
+      relics: [...snap.game.relics],
+    });
   }
 
   private renderAllViews(snap: Readonly<BattleStateSnapshot>): void {
@@ -564,6 +582,12 @@ export class BattleScene extends Phaser.Scene {
   private resetBattleResultState(): void {
     // Map 回流探测点：SHUTDOWN 时把最终战果写入 game.registry，MapScene 读后据此决定节点是否 completed
     this.registry.set('lastBattleResult', this.battleResult);
+
+    // α-go 第 8 单 HUD：写回最终 HP + 清 HUD。try/catch 防 battleState 未初始化时抛错（保留旧 hp）
+    try { writeRunHp(this, this.battleState.getSnapshot().game.hp); } catch { /* skip */ }
+    this.hudBar?.destroy();
+    this.hudBar = null;
+
     this.battleResult = null;
     if (this.overBanner) {
       this.overBanner.destroy();
