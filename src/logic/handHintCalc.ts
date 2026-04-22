@@ -13,6 +13,8 @@ export interface HandHintParams {
   isEnemyTurn: boolean;
   playsLeft: number;
   dice: Die[];
+  /** 万象归一是否生效（pairAsTriplet）。PHASER-FIX-STRAIGHT-PENDING-2。 */
+  pairAsTriplet?: boolean;
 }
 
 /**
@@ -23,7 +25,7 @@ export interface HandHintParams {
  * - 有选中骰子时，逐个测试未选中可用骰子能否与已选组成非普通攻击牌型
  */
 export function computeHandHintIds(params: HandHintParams): Set<number> {
-  const { phase, isEnemyTurn, playsLeft, dice } = params;
+  const { phase, isEnemyTurn, playsLeft, dice, pairAsTriplet = false } = params;
   if (phase !== 'battle' || isEnemyTurn || playsLeft <= 0) return new Set<number>();
 
   const selected = dice.filter(d => d.selected && !d.spent);
@@ -35,7 +37,7 @@ export function computeHandHintIds(params: HandHintParams): Set<number> {
   const result = new Set<number>();
   for (const other of available) {
     const combo = [...selected, other];
-    const hand = checkHands(combo);
+    const hand = checkHands(combo, { pairAsTriplet });
     if (hand.activeHands.some(h => h !== '普通攻击')) {
       result.add(other.id);
     }

@@ -9,6 +9,8 @@ import type { Die, DiceElement, HandResult } from "@/types/game";
  * 交互：6 个骰子槽位，每槽可调点数（1-6）和元素；点数变化实时刷新结果。
  */
 export class HandTestScene extends Phaser.Scene {
+  /** 万象归一(pairAsTriplet)测试开关 */
+  private pairAsTripletEnabled = false;
   private static readonly SLOT_COUNT = 6;
   private static readonly ELEMENTS: DiceElement[] = [
     "normal", "fire", "ice", "thunder", "poison", "holy",
@@ -291,12 +293,12 @@ export class HandTestScene extends Phaser.Scene {
         spent: false,
       }));
 
-    const result: HandResult = checkHands(dice);
+    const result: HandResult = checkHands(dice, { pairAsTriplet: this.pairAsTripletEnabled });
     const sum = dice.reduce((a, d) => a + d.value, 0);
 
     this.bestHandText.setText(result.bestHand || "—");
     this.activeHandsText.setText(`activeHands: [${result.activeHands.join(", ")}]`);
-    this.sumText.setText(`dice: ${dice.length} 颗  |  点数和: ${sum}`);
+    this.sumText.setText(`dice: ${dice.length} 颗  |  点数和: ${sum}  |  万象归一: ${this.pairAsTripletEnabled ? 'ON' : 'OFF'}`);
   }
 }
 

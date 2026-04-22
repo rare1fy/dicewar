@@ -51,9 +51,9 @@ export const checkHands = (dice: Die[], options?: { straightUpgrade?: number; pa
   if (maxCount === 3 && dice.length === 3) hands.add('三条');
   // 3+3 = 6颗骰子，两种点数各3颗 → 识别为葫芦（超级三条）
   if (maxCount >= 3 && sortedCounts.length >= 2 && sortedCounts[1] >= 3 && dice.length === 6) hands.add('葫芦');
-  if (maxCount === 2 && dice.length === 2) hands.add('对子');
-  // PHASER-FIX-STRAIGHT-PENDING-2：对子满足三条判型门槛
+  // PHASER-FIX-STRAIGHT-PENDING-2：万象归一生效时，对子视为三条（替换，非追加）
   if (hasPairAsTriplet && maxCount === 2 && dice.length === 2) hands.add('三条');
+  else if (maxCount === 2 && dice.length === 2) hands.add('对子');
   if (isFullHouse && dice.length === 5) hands.add('葫芦');
   // 4+2 = 6颗葫芦
   if (sortedCounts.length >= 2 && sortedCounts[0] === 4 && sortedCounts[1] === 2 && dice.length === 6) hands.add('葫芦');
@@ -97,9 +97,9 @@ export const checkHands = (dice: Die[], options?: { straightUpgrade?: number; pa
   else if (maxCount === 3 && dice.length === 3) { activeHands.push('三条'); hasBaseHand = true; }
   else if (isThreePair && dice.length === 6) { activeHands.push('三连对'); hasBaseHand = true; }
   else if (isTwoPair && dice.length === 4) { activeHands.push('连对'); hasBaseHand = true; }
+  // PHASER-FIX-STRAIGHT-PENDING-2：万象归一生效时，对子视为三条（替换，非追加）
+  else if (hasPairAsTriplet && maxCount === 2 && dice.length === 2) { activeHands.push('三条'); hasBaseHand = true; }
   else if (maxCount === 2 && dice.length === 2) { activeHands.push('对子'); hasBaseHand = true; }
-  // PHASER-FIX-STRAIGHT-PENDING-2：对子视为三条结算
-  if (hasPairAsTriplet && maxCount === 2 && dice.length === 2 && !activeHands.includes('三条')) { activeHands.push('三条'); hasBaseHand = true; }
 
   // 顺子可叠加（按长度取最高）
   if (isStraight) {
