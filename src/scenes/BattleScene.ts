@@ -7,15 +7,17 @@
  *     - 胶水：`battle/BattleGlue.ts`（γ 真实伤害 + δ-1 遗物触发链）
  *     - 视图：`battle/view/*`（β ✅）
  *     - 演出：`battle/BattleFx.ts`（δ-2 飘字 / 闪烁 / 震屏 / 淡入）
- *     - 音效：`utils/sound.ts`（**仍为空桩**，登记为 PHASER-SOUND-01 欠账，等 Designer 提供音源）
+ *     - 音效：`utils/sound.ts` + `utils/sfxSynth.ts`（Web Audio 合成器，ASSET-SOUND ✅）；BGM 本 Scene 直管 Phaser.sound
  *
  * UI-01 分段：
  *   - [α] 场景骨架 + BattleState ✅
  *   - [β] 4 个视图 + 抽/弃/出牌骨架（无结算链）✅
  *   - [γ] BattleGlue 接出牌真实伤害 + 敌人真实反击 ✅
  *   - [δ-1] MVP 三件遗物触发链 + 胜败闭环 ✅
- *   - [δ-2] 轻量视觉演出（伤害飘字 / 目标闪烁 / 玩家震屏 / 横幅淡入）← 本次
+ *   - [δ-2] 轻量视觉演出（伤害飘字 / 目标闪烁 / 玩家震屏 / 横幅淡入）
  *   - [δ-3] 多敌目标选择 + enemyAI 完整链（下次）
+ *   - Phase 0 ASSET-APPLY：敌人像素接线（食尸鬼 sprite 替代 emoji）✅
+ *   - Phase 0 ASSET-SOUND：Web Audio 合成 SFX（roll/play/hit/heal/victory/death 6 个接入点）✅
  *
  * Designer MVP（designer-UI-01-MVP-SCOPE-20260421.md）：
  *   6 槽骰子 UI / 战士单职业 / 弃牌1次每回合 / 真实伤害单敌人 / 3 件验证遗物 / 胜败即重开
@@ -45,6 +47,7 @@ import { EnemyView } from './battle/view/EnemyView';
 import { DiceTray } from './battle/view/DiceTray';
 import { ActionBar } from './battle/view/ActionBar';
 import { bakeAllEnemySprites } from './battle/EnemyAssetLoader';
+import { playSound } from '../utils/sound';
 import { ALL_RELICS } from '../data/relics';
 import type { Enemy, Die, Relic } from '../types/game';
 
@@ -237,7 +240,7 @@ export class BattleScene extends Phaser.Scene {
 
     // δ-2 段提示
     this.add.text(padding, 720,
-      'δ-2 视觉演出：命中敌人飘红字+红闪 / 玩家受击震屏+飘白字 / 回血飘绿字 / 胜败横幅淡入。音效仍为空桩，待 PHASER-SOUND-01。',
+      'δ-2 视觉演出：命中敌人飘红字+红闪 / 玩家受击震屏+飘白字 / 回血飘绿字 / 胜败横幅淡入。SFX 已接：roll/play/hit/heal/victory/death（Web Audio 合成）。',
       {
         fontFamily: 'Arial, sans-serif', fontSize: '13px', color: '#6b7280',
         wordWrap: { width: innerWidth },
@@ -269,8 +272,13 @@ export class BattleScene extends Phaser.Scene {
       this.bgm.destroy();
       this.bgm = null;
     }
-    // 步骤 2：兜底清理 manager 里所有同 key 残留（应对开发期热更 / Scene 快速切换的边缘情况）
-    this.sound.removeAll(); // MVP 阶段只有 bgm 这一个音频对象，removeAll 安全；后续接音效后改为按 key 精确 remove
+    // 步骤 2：按 key 精确清理同名残留（应对开发期热更 / Scene 快速切换的边缘情况）
+    // 历史：曾用 this.sound.removeAll()——PIXEL-ENGINE-BGM v2 Verify WARN-1 指出：
+    //   SOUND 接入后 removeAll 会误杀其他音频对象（如 Web Audio sfx 同实例管理到 Phaser.sound 时）。
+    //   改精确 key 清理更稳，语义明确：只删 bgm_normal 这一个键，不触碰其他。
+    if (this.sound.get('bgm_normal')) {
+      this.sound.removeByKey('bgm_normal');
+    }
 
     if (!this.cache.audio.exists('bgm_normal')) {
       console.warn('[BattleScene] bgm_normal 未加载，跳过 BGM 启动');
@@ -310,6 +318,9 @@ export class BattleScene extends Phaser.Scene {
 
     this.battleState.setters.dice(drawn);
     this.battleState.setters.game((g) => ({ ...g, diceBag: newBag, discardPile: newDiscard }));
+
+    // SFX: 骰子落盘（Web Audio 合成）
+    playSound('roll');
   }
 
   /**
@@ -321,6 +332,9 @@ export class BattleScene extends Phaser.Scene {
     const selected = snap.dice.filter((d) => d.selected && !d.spent);
     if (selected.length === 0 || snap.game.playsLeft <= 0) return;
     if (this.isBattleOver()) return;
+
+    // SFX: 出牌启动音（牌型判定前触发，给玩家即时反馈）
+    playSound('play');
 
     // 1) 牌型判定（注入遗物 straightUpgrade）
     const hand = evaluateHand(selected, snap.game.relics);
@@ -361,6 +375,8 @@ export class BattleScene extends Phaser.Scene {
           : 'normal';
       playDamageFloat(this, center.x, center.y, outcome.primaryDamage, fxKind);
       flashTarget(this, this.enemyView.getContainer());
+      // SFX: 高倍率用 critical、普通命中用 hit（与飘字 fxKind 呼应）
+      playSound(outcome.multiplier >= 3 ? 'critical' : 'hit');
     }
 
     // 7) 遗物回血（healing_breeze 等）— 封顶 maxHp
@@ -372,6 +388,8 @@ export class BattleScene extends Phaser.Scene {
       // δ-2 演出：玩家身上飘绿字
       const pCenter = this.playerView.getWorldCenter();
       playDamageFloat(this, pCenter.x, pCenter.y, aggregate.heal, 'heal');
+      // SFX: 遗物回血
+      playSound('heal');
     }
 
     // 8) 胜负检查
@@ -502,6 +520,9 @@ export class BattleScene extends Phaser.Scene {
   private showOverBanner(title: string, titleColor: string): void {
     if (this.overBanner) return; // 防重入
     const { width, height } = this.scale;
+
+    // SFX: 胜利琶音 / 失败降调（按 title 字符串路由，避免新增一个独立参数）
+    playSound(title === '胜利' ? 'victory' : 'death');
 
     const container = this.add.container(0, 0).setDepth(1000);
 

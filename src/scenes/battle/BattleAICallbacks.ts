@@ -9,7 +9,7 @@
  *   - 台词系统（showEnemyQuote / getEnemyQuotes / pickQuote / scheduleDelayedQuote / enemyPreAction）
  *     全部 no-op / 返回固定值，MVP 不做台词
  *   - addToast / addLog → 仅 console.log 兜底
- *   - playSound → 空桩（与 utils/sound.ts 策略一致，登记 PHASER-SOUND-01）
+ *   - playSound → Web Audio 合成器（ASSET-SOUND 已接）
  *   - setRerollCount / setDice / rollAllDice / setWaveAnnouncement / setEnemyEffects /
  *     setDyingEnemies → 接 BattleState.setters，enemyAI 用到就正常生效
  *   - addFloatingText → 接 BattleFx.playDamageFloat（颜色字符串 → 简单映射）
@@ -38,6 +38,7 @@ import { BattleState } from './BattleState';
 import { playDamageFloat, playLabelFloat, shakeOnPlayerHit } from './BattleFx';
 import { PlayerView } from './view/PlayerView';
 import { EnemyView } from './view/EnemyView';
+import { playSound } from '../../utils/sound';
 
 /**
  * 把 Tailwind color class（'text-red-500' / 'text-orange-500' / ...）映射到 BattleFx kind。
@@ -124,8 +125,8 @@ export function buildBattleAICallbacks(
     addLog: (msg) => console.log(`[BattleLog] ${msg}`),
     addToast: (msg, type) => console.log(`[Toast:${type}] ${msg}`),
 
-    // ---- 音效：空桩（等 PHASER-SOUND-01）----
-    playSound: () => { /* no-op，等 Designer 提供音源 */ },
+    // ---- 音效：Web Audio 合成（ASSET-SOUND 已接）。enemyAI 内部 playSound('hit') 等直接透传。 ----
+    playSound: (type: string) => playSound(type),
 
     // ---- 摇屏：部分场景 enemyAI 会显式调 setScreenShake(true/false)，
     //      这里 setScreenShake 已接 BattleState，但**真实摇屏**额外由 BattleFx 触发。

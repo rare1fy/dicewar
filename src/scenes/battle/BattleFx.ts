@@ -7,7 +7,7 @@
  *
  * 不做：
  *   - 结算分阶段动画（runSettlementAnimation 4 phase）→ 依赖 15+ setter 的重接线，留 δ-3+
- *   - 音效播放 → 当前 sound.ts 是空桩，无资源可播，登记为独立欠账 PHASER-SOUND-01
+ *   - 音效播放 → 已由 utils/sound.ts + utils/sfxSynth.ts 提供（Web Audio 合成），ASSET-SOUND ✅
  *   - 骰子翻转/重投动画 → 非 δ-2 范围
  *
  * 技术选型：
