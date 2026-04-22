@@ -304,7 +304,7 @@ export class BattleScene extends Phaser.Scene {
     // 1) 牌型判定（注入遗物 straightUpgrade）
     const hand = evaluateHand(selected, snap.game.relics);
 
-    // 2) 遗物 on_play 聚合（multiplier / heal）
+    // 2) 遗物 on_play 聚合（multiplier / heal / bonusDamage）
     const pointSum = selected.reduce((s, d) => s + d.value, 0);
     const targetEnemy = snap.enemies.find((e) => e.hp > 0) ?? null;
     const aggregate: RelicEffectAggregate = triggerOnPlayRelics({
