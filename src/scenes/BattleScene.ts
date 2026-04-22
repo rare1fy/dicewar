@@ -39,7 +39,6 @@ import {
   playDamageFloat,
   flashTarget,
 } from './battle/BattleFx';
-import { showBattleGameOverBanner } from './battle/BattleGameOverBanner';
 import { runEnemyTurn, type EnemyTurnResult } from './battle/BattleTurnRunner';
 import { buildBattleAICallbacks, bridgeScreenShake } from './battle/BattleAICallbacks';
 import { PlayerView } from './battle/view/PlayerView';
@@ -48,40 +47,21 @@ import { DiceTray } from './battle/view/DiceTray';
 import { ActionBar } from './battle/view/ActionBar';
 import { bakeAllEnemySprites } from './battle/EnemyAssetLoader';
 import { playSound } from '../utils/sound';
-import { ALL_RELICS } from '../data/relics';
-import type { Enemy, Die, Relic, ClassId } from '../types/game';
+// α-go 多职业 B1 拆分（2026-04-22）：原本在本文件的 MVP 硬编码敌人/遗物、BGM 管理、胜负闭环
+// 全部下沉到 battle/BattleMvpData.ts / BattleBgm.ts / BattleOutcome.ts，守住 600 行红线同时
+// 让多职业起手遗物配表独立演进（Designer 可直接改 BattleMvpData）。
+import { buildMvpEnemy, buildMvpRelics } from './battle/BattleMvpData';
+import {
+  preloadBattleBgm,
+  startBattleBgm,
+  stopBattleBgm,
+  createEmptyBgmHandle,
+  type BattleBgmHandle,
+} from './battle/BattleBgm';
+import { checkBattleOver as checkBattleOverShared, showOverBanner as showOverBannerShared, type BattleOutcomeContext } from './battle/BattleOutcome';
+import type { Die, ClassId } from '../types/game';
 
-// MVP 硬编码敌人（Designer 方案 4-B：固定每回合 10 点伤害的训练木桩）
-// APPLY: name 从"训练木桩"换成"食尸鬼"（ENEMY_SPRITES 已有），让像素接线肉眼可验收；
-//        其余数值保持训练木桩不变（不破坏 Designer 的 MVP 数值契约）
-function buildMvpEnemy(): Enemy {
-  return {
-    uid: 'mvp_dummy_0',
-    configId: 'mvp_dummy',
-    name: '食尸鬼',
-    hp: 60,
-    maxHp: 60,
-    armor: 0,
-    attackDmg: 10,
-    combatType: 'warrior',
-    dropGold: 0,
-    dropRelic: false,
-    emoji: '🎯',
-    statuses: [],
-    distance: 0,
-  };
-}
-
-// MVP 开局三件遗物（Designer 裁定）
-const MVP_RELIC_IDS = ['dimension_crush', 'healing_breeze', 'arithmetic_gauge'] as const;
-
-function buildMvpRelics(): Relic[] {
-  return MVP_RELIC_IDS.map((id) => {
-    const found = ALL_RELICS[id];
-    if (!found) throw new Error(`[BattleScene] MVP 遗物缺失: ${id}（数据同步问题）`);
-    return found;
-  });
-}
+// （MVP 数据已下沉到 BattleMvpData.ts）
 
 export class BattleScene extends Phaser.Scene {
   private battleState!: BattleState;
@@ -100,8 +80,8 @@ export class BattleScene extends Phaser.Scene {
   // δ-3d 防重入：敌人回合异步执行期间禁止再次点击"结束回合"
   private isResolvingEnemyTurn = false;
 
-  // BGM 句柄（preload 成功后持有，scene shutdown 时显式清理避免叠播）
-  private bgm: Phaser.Sound.BaseSound | null = null;
+  // BGM 句柄（α-go 多职业拆分后封装在 BattleBgmHandle 里）
+  private bgm: BattleBgmHandle = createEmptyBgmHandle();
 
   // α-go 第 2 单：从 ClassSelectScene 注入的职业 id（未注入时回落 'warrior' 保留单测/直启路径）
   private classId: ClassId = 'warrior';
@@ -123,22 +103,10 @@ export class BattleScene extends Phaser.Scene {
 
   /**
    * 预加载 4 首 BGM（Start / Normal / Outside / Boss）。
-   * 仅 Normal 在本 MVP 场景中激活循环播放；其余登记但不启动，留给后续章节 / Boss 切换。
+   * 实际注册细节在 BattleBgm.preloadBattleBgm；本方法只做调度。
    */
   preload(): void {
-    // 防重入：Phaser cache 内已有相同 key 时跳过（scene.restart 会重跑 preload）
-    if (!this.cache.audio.exists('bgm_start')) {
-      this.load.audio('bgm_start', 'audio/DiceBattle-Start.mp3');
-    }
-    if (!this.cache.audio.exists('bgm_normal')) {
-      this.load.audio('bgm_normal', 'audio/DiceBattle-Normal.mp3');
-    }
-    if (!this.cache.audio.exists('bgm_outside')) {
-      this.load.audio('bgm_outside', 'audio/DiceBattle-Outside.mp3');
-    }
-    if (!this.cache.audio.exists('bgm_boss')) {
-      this.load.audio('bgm_boss', 'audio/DiceBattle-Boss.mp3');
-    }
+    preloadBattleBgm(this);
   }
 
   create(): void {
@@ -185,7 +153,8 @@ export class BattleScene extends Phaser.Scene {
   // ==========================================================================
   private buildInitialSnapshot(): BattleStateSnapshot {
     const game = createInitialGameState(this.classId);
-    game.relics = buildMvpRelics();
+    // α-go 多职业：按 classId 取职业起手遗物（见 BattleMvpData.STARTER_RELIC_IDS）
+    game.relics = buildMvpRelics(this.classId);
 
     const initialDice: Die[] = [];
 
@@ -277,48 +246,16 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /**
-   * 启动战斗 BGM（默认循环 Normal 曲）。
-   * 设计决策：
-   *   - MVP 统一用 Normal，Boss 战切换登记为 PHASER-ASSET-BGM-SWITCH 后续任务。
-   *   - 音量 0.3 对齐原版 soundPlayer 的默认 BGM 音量（太响会盖住音效）。
-   *   - Phaser 在 autoplay policy 未解锁时会静默失败 —— 不抛异常，等待用户首次交互后自动触发。
-   *
-   * 防叠播（Verify v1 REJECT 修复）：
-   *   Phaser 的 sound manager 是 Game 级单例，scene.restart 不会自动清理旧 bgm 实例。
-   *   启动前先显式 stop+destroy 本 scene 持有的旧句柄，并 remove 全局同 key 残留实例（保险）。
+   * 启动战斗 BGM。调度到 BattleBgm.startBattleBgm（含防叠播 + cache 校验）。
+   * 同时把返回的新 handle 赋给 this.bgm，供 shutdown 时清理。
    */
   private startBgm(): void {
-    // 步骤 1：清本 scene 的旧句柄（通常 shutdown 已清，这里是二次保险）
-    if (this.bgm) {
-      this.bgm.stop();
-      this.bgm.destroy();
-      this.bgm = null;
-    }
-    // 步骤 2：按 key 精确清理同名残留（应对开发期热更 / Scene 快速切换的边缘情况）
-    // 历史：曾用 this.sound.removeAll()——PIXEL-ENGINE-BGM v2 Verify WARN-1 指出：
-    //   SOUND 接入后 removeAll 会误杀其他音频对象（如 Web Audio sfx 同实例管理到 Phaser.sound 时）。
-    //   改精确 key 清理更稳，语义明确：只删 bgm_normal 这一个键，不触碰其他。
-    if (this.sound.get('bgm_normal')) {
-      this.sound.removeByKey('bgm_normal');
-    }
-
-    if (!this.cache.audio.exists('bgm_normal')) {
-      console.warn('[BattleScene] bgm_normal 未加载，跳过 BGM 启动');
-      return;
-    }
-    this.bgm = this.sound.add('bgm_normal', { loop: true, volume: 0.3 });
-    this.bgm.play();
+    this.bgm = startBattleBgm(this, this.bgm);
   }
 
-  /**
-   * 停止并销毁 BGM。由 Scene SHUTDOWN / DESTROY / restartBattle 调用。
-   * 幂等：多次调用安全（null 守卫）。
-   */
+  /** 停止并销毁 BGM。幂等安全（null 守卫在 stopBattleBgm 里）。 */
   private stopBgm(): void {
-    if (!this.bgm) return;
-    this.bgm.stop();
-    this.bgm.destroy();
-    this.bgm = null;
+    stopBattleBgm(this.bgm);
   }
 
   // ==========================================================================
@@ -508,52 +445,44 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ==========================================================================
-  // δ-3 胜败闭环
+  // δ-3 胜败闭环（α-go 多职业拆分后下沉 BattleOutcome.ts）
   // ==========================================================================
 
-  /** 当前战斗是否已分胜负。防止横幅弹出后继续点按钮继续打。 */
+  /** 构造 Outcome 模块需要的 context —— 把 Scene 私有字段的读写暴露为闭包 */
+  private buildOutcomeContext(): BattleOutcomeContext {
+    return {
+      scene: this,
+      getResult: () => this.battleResult,
+      setResult: (r) => { this.battleResult = r; },
+      getBanner: () => this.overBanner,
+      setBanner: (b) => { this.overBanner = b; },
+      onRestart: () => this.restartBattle(),
+      onBackToClassSelect: () => this.backToClassSelect(),
+      onBackToStart: () => this.backToStart(),
+      onBackToMap: () => this.backToMap(),
+    };
+  }
+
+  /** 战斗是否已分胜负（用于 handlePlay / handleEndTurn 前置判断）。 */
   private isBattleOver(): boolean {
     return this.battleResult !== null;
   }
 
   /**
-   * 检查胜负并按需弹横幅。
+   * 检查胜负并按需弹横幅。逻辑下沉 BattleOutcome.checkBattleOver。
    * @returns true 表示战斗已结束（调用方应中止后续动作）
    */
   private checkBattleOver(): boolean {
-    if (this.battleResult !== null) return true;
     const snap = this.battleState.getSnapshot();
-
-    if (snap.game.hp <= 0) {
-      this.battleResult = 'defeat';
-      this.showOverBanner('失败', '#ef4444');
-      return true;
-    }
-    const anyAlive = snap.enemies.some((e) => e.hp > 0);
-    if (!anyAlive) {
-      this.battleResult = 'victory';
-      this.showOverBanner('胜利', '#22c55e');
-      return true;
-    }
-    return false;
+    return checkBattleOverShared(this.buildOutcomeContext(), {
+      playerHp: snap.game.hp,
+      anyEnemyAlive: snap.enemies.some((e) => e.hp > 0),
+    });
   }
 
-  /**
-   * 全屏半透明遮罩 + 结局文字 + 3 按钮回流。
-   * - 默认：再战一局 / 换个职业 / 回到首屏（独立战斗 / 开发者菜单直入）
-   * - 从 Map 进入时（registry.pendingBattleNodeId 存在）：返回地图 / 换个职业 / 回到首屏
-   * 横幅本体实现下沉至 BattleGameOverBanner.ts。
-   */
+  /** 弹横幅（由 handleEndTurn 里的 EnemyTurnResult 分支直接调用）。 */
   private showOverBanner(title: string, titleColor: string): void {
-    if (this.overBanner) return; // 防重入
-    playSound(title === '胜利' ? 'victory' : 'death');
-    const fromMap = this.registry.get('pendingBattleNodeId') != null;
-    this.overBanner = showBattleGameOverBanner(this, title, titleColor, {
-      restartLabel: fromMap ? '返回地图' : '再战一局',
-      onRestart: () => fromMap ? this.backToMap() : this.restartBattle(),
-      onBackToClassSelect: () => this.backToClassSelect(),
-      onBackToStart: () => this.backToStart(),
-    });
+    showOverBannerShared(this.buildOutcomeContext(), title, titleColor);
   }
 
   /**
