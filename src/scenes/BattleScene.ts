@@ -92,8 +92,31 @@ export class BattleScene extends Phaser.Scene {
   // δ-3d 防重入：敌人回合异步执行期间禁止再次点击"结束回合"
   private isResolvingEnemyTurn = false;
 
+  // BGM 句柄（preload 成功后持有，scene shutdown 时显式清理避免叠播）
+  private bgm: Phaser.Sound.BaseSound | null = null;
+
   constructor() {
     super('BattleScene');
+  }
+
+  /**
+   * 预加载 4 首 BGM（Start / Normal / Outside / Boss）。
+   * 仅 Normal 在本 MVP 场景中激活循环播放；其余登记但不启动，留给后续章节 / Boss 切换。
+   */
+  preload(): void {
+    // 防重入：Phaser cache 内已有相同 key 时跳过（scene.restart 会重跑 preload）
+    if (!this.cache.audio.exists('bgm_start')) {
+      this.load.audio('bgm_start', 'audio/DiceBattle-Start.mp3');
+    }
+    if (!this.cache.audio.exists('bgm_normal')) {
+      this.load.audio('bgm_normal', 'audio/DiceBattle-Normal.mp3');
+    }
+    if (!this.cache.audio.exists('bgm_outside')) {
+      this.load.audio('bgm_outside', 'audio/DiceBattle-Outside.mp3');
+    }
+    if (!this.cache.audio.exists('bgm_boss')) {
+      this.load.audio('bgm_boss', 'audio/DiceBattle-Boss.mp3');
+    }
   }
 
   create(): void {
@@ -101,6 +124,7 @@ export class BattleScene extends Phaser.Scene {
 
     this.buildStaticLayout();
     this.buildViews();
+    this.startBgm();
 
     // 订阅刷新所有视图
     this.battleState.subscribe((snap) => this.renderAllViews(snap));
@@ -110,6 +134,11 @@ export class BattleScene extends Phaser.Scene {
 
     // 开局先抽一手牌
     this.drawHand();
+
+    // BGM 生命周期：Scene shutdown 时显式清理，避免 restart 叠播
+    // （Phaser BaseSoundManager.removeAll 只在 game destroy 时触发，不会随 scene 重启自动清）
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.stopBgm());
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => this.stopBgm());
   }
 
   // ==========================================================================
@@ -206,6 +235,46 @@ export class BattleScene extends Phaser.Scene {
     this.enemyView.render(snap);
     this.diceTray.render(snap);
     this.actionBar.render(snap);
+  }
+
+  /**
+   * 启动战斗 BGM（默认循环 Normal 曲）。
+   * 设计决策：
+   *   - MVP 统一用 Normal，Boss 战切换登记为 PHASER-ASSET-BGM-SWITCH 后续任务。
+   *   - 音量 0.3 对齐原版 soundPlayer 的默认 BGM 音量（太响会盖住音效）。
+   *   - Phaser 在 autoplay policy 未解锁时会静默失败 —— 不抛异常，等待用户首次交互后自动触发。
+   *
+   * 防叠播（Verify v1 REJECT 修复）：
+   *   Phaser 的 sound manager 是 Game 级单例，scene.restart 不会自动清理旧 bgm 实例。
+   *   启动前先显式 stop+destroy 本 scene 持有的旧句柄，并 remove 全局同 key 残留实例（保险）。
+   */
+  private startBgm(): void {
+    // 步骤 1：清本 scene 的旧句柄（通常 shutdown 已清，这里是二次保险）
+    if (this.bgm) {
+      this.bgm.stop();
+      this.bgm.destroy();
+      this.bgm = null;
+    }
+    // 步骤 2：兜底清理 manager 里所有同 key 残留（应对开发期热更 / Scene 快速切换的边缘情况）
+    this.sound.removeAll(); // MVP 阶段只有 bgm 这一个音频对象，removeAll 安全；后续接音效后改为按 key 精确 remove
+
+    if (!this.cache.audio.exists('bgm_normal')) {
+      console.warn('[BattleScene] bgm_normal 未加载，跳过 BGM 启动');
+      return;
+    }
+    this.bgm = this.sound.add('bgm_normal', { loop: true, volume: 0.3 });
+    this.bgm.play();
+  }
+
+  /**
+   * 停止并销毁 BGM。由 Scene SHUTDOWN / DESTROY / restartBattle 调用。
+   * 幂等：多次调用安全（null 守卫）。
+   */
+  private stopBgm(): void {
+    if (!this.bgm) return;
+    this.bgm.stop();
+    this.bgm.destroy();
+    this.bgm = null;
   }
 
   // ==========================================================================
@@ -456,6 +525,8 @@ export class BattleScene extends Phaser.Scene {
       this.overBanner.destroy();
       this.overBanner = null;
     }
+    // BGM 显式清理（SHUTDOWN 事件会再兜底一次，幂等安全）
+    this.stopBgm();
     this.scene.restart();
   }
 }
