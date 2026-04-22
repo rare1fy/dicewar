@@ -50,7 +50,9 @@ import { playSound } from '../utils/sound';
 // α-go 多职业 B1 拆分（2026-04-22）：原本在本文件的 MVP 硬编码敌人/遗物、BGM 管理、胜负闭环
 // 全部下沉到 battle/BattleMvpData.ts / BattleBgm.ts / BattleOutcome.ts，守住 600 行红线同时
 // 让多职业起手遗物配表独立演进（Designer 可直接改 BattleMvpData）。
-import { buildMvpEnemy, buildMvpRelics } from './battle/BattleMvpData';
+import { buildMvpEnemyForType, buildMvpRelics } from './battle/BattleMvpData';
+import type { BattleType } from './battle/BattleMvpData';
+import { showBossEntrance } from './battle/BattleBossEntrance';
 import {
   preloadBattleBgm,
   startBattleBgm,
@@ -85,6 +87,15 @@ export class BattleScene extends Phaser.Scene {
 
   // α-go 第 2 单：从 ClassSelectScene 注入的职业 id（未注入时回落 'warrior' 保留单测/直启路径）
   private classId: ClassId = 'warrior';
+  /**
+   * 战斗类型（α-go 第 7 单 BOSS-MVP 接入）：
+   *   - normal：普通战斗（从 Map enemy 节点 / 直启调试进入，默认值）
+   *   - elite：精英战（Map elite 节点）
+   *   - boss：章节 Boss 战（触发 BossEntrance 演出 + 切 bgm_boss）
+   *
+   * 默认 normal：无参数直启（dev 调试 / StartScene 测试入口）退化为普通战斗。
+   */
+  private battleType: BattleType = 'normal';
 
   constructor() {
     super('BattleScene');
@@ -97,8 +108,10 @@ export class BattleScene extends Phaser.Scene {
    * Verify PHASER-SCENE-CLASS-SELECT / R1+R2 修复：
    *   原实现只有"带参时覆盖"，未处理 else → 连续两次不同职业进入时会静默泄漏上一次职业。
    */
-  init(data: { classId?: ClassId } | undefined): void {
+  init(data: { classId?: ClassId; battleType?: BattleType } | undefined): void {
     this.classId = (data && data.classId) ? data.classId : 'warrior';
+    // battleType 同理：未传入 → 回退 'normal'，避免上一次 Boss 残留污染下一次 normal 战斗
+    this.battleType = (data && data.battleType) ? data.battleType : 'normal';
   }
 
   /**
@@ -118,16 +131,21 @@ export class BattleScene extends Phaser.Scene {
 
     this.buildStaticLayout();
     this.buildViews();
-    this.startBgm();
 
-    // 订阅刷新所有视图
+    // 订阅刷新所有视图（在 startBattleFlow 之前挂载，保证第一次 renderAllViews 有订阅者）
     this.battleState.subscribe((snap) => this.renderAllViews(snap));
     // δ-3d：注册震屏桥——enemyAI 内部 setScreenShake(true) 上升沿触发一次 shakeOnPlayerHit
     bridgeScreenShake(this, this.battleState);
     this.renderAllViews(this.battleState.getSnapshot());
 
-    // 开局先抽一手牌
-    this.drawHand();
+    // α-go 第 7 单 BOSS-MVP：boss 战先播入场演出再开战；非 boss 直接开战
+    if (this.battleType === 'boss') {
+      // 演出期间不启动 BGM（沉浸感）；演出结束后 startBattleFlow 才播 bgm_boss
+      const enemyName = this.battleState.getSnapshot().enemies[0]?.name ?? 'BOSS';
+      showBossEntrance(this, { name: enemyName, chapter: 1 }, () => this.startBattleFlow());
+    } else {
+      this.startBattleFlow();
+    }
 
     // BGM 生命周期：Scene shutdown 时显式清理，避免 restart 叠播
     // （Phaser BaseSoundManager.removeAll 只在 game destroy 时触发，不会随 scene 重启自动清）
@@ -167,7 +185,7 @@ export class BattleScene extends Phaser.Scene {
     return {
       game,
       dice: initialDice,
-      enemies: [buildMvpEnemy()],
+      enemies: [buildMvpEnemyForType(this.battleType)],
       rerollCount: 0,
       screenShake: false,
       bossEntrance: { visible: false, name: '', chapter: 1 },
@@ -256,7 +274,8 @@ export class BattleScene extends Phaser.Scene {
    * 同时把返回的新 handle 赋给 this.bgm，供 shutdown 时清理。
    */
   private startBgm(): void {
-    this.bgm = startBattleBgm(this, this.bgm);
+    // α-go 第 7 单 BOSS-MVP：boss 战切到 bgm_boss，normal/elite 统一 bgm_normal
+    this.bgm = startBattleBgm(this, this.bgm, this.battleType);
   }
 
   /** 停止并销毁 BGM。幂等安全（null 守卫在 stopBattleBgm 里）。 */
@@ -497,12 +516,22 @@ export class BattleScene extends Phaser.Scene {
    * 传 null 表示 scene.restart（再战一局）。
    * 所有按钮回调都收口到这里，DRY + 未来扩展按钮只加一行 wrapper。
    */
+  /**
+   * 启动战斗流：startBgm + drawHand。抽出独立方法是因为 BOSS-MVP 引入了"入场演出先行"
+   * 的分支 —— boss 战在演出结束后才调，normal/elite 立即调。共同入口 DRY。
+   */
+  private startBattleFlow(): void {
+    this.startBgm();
+    this.drawHand();
+  }
+
   private leaveToScene(targetKey: string | null): void {
     if (this.isLeavingScene) return; // R3：防 3 按钮连点重入
     this.isLeavingScene = true;
     this.stopBgm(); // BGM 显式清理（SHUTDOWN 也会兜底，幂等安全）
     if (targetKey === null) {
-      this.scene.restart({ classId: this.classId });
+      // BOSS-MVP 修正：restart 必须同时带 battleType，否则 Boss 战"再战一局"会退化为 normal
+      this.scene.restart({ classId: this.classId, battleType: this.battleType });
     } else {
       // 统一透传 classId：MapScene/LootScene/ClassSelectScene/StartScene 都能安全接收
       // （各自 init 内部只认自己关心的字段，多余字段忽略；StartScene 无 init 无影响）

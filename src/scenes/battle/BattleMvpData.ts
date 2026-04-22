@@ -17,10 +17,21 @@ import { ALL_RELICS } from '../../data/relics';
 import type { Enemy, Relic, ClassId } from '../../types/game';
 
 /**
- * MVP 训练木桩（固定每回合攻击 10 点，血量 60）
- * 命名改为"食尸鬼"以复用 ENEMY_SPRITES 里已有的像素资产，数值保持训练木桩不变。
+ * 战斗类型：对应 MapNode.type 的"战斗型"子集（enemy/elite/boss）。
+ * - normal：对齐 NodeType 'enemy'，普通遭遇战
+ * - elite：精英（介于普通与 Boss 之间）
+ * - boss：章节 Boss（差异化：高血、高伤、触发 BossEntrance 演出、切 Boss BGM）
+ *
+ * 为什么不直接用 NodeType：NodeType 还包含 shop/event/treasure 等非战斗类型，
+ *   这里只想在战斗场景里区分"敌人规格"，语义更窄更聚焦。
  */
-export function buildMvpEnemy(): Enemy {
+export type BattleType = 'normal' | 'elite' | 'boss';
+
+/**
+ * MVP 敌人：normal 节点（食尸鬼，60HP / 10atk）
+ * 沿用原"训练木桩"数值，命名复用 ENEMY_SPRITES 已有像素资产。
+ */
+function buildNormalEnemy(): Enemy {
   return {
     uid: 'mvp_dummy_0',
     configId: 'mvp_dummy',
@@ -36,6 +47,80 @@ export function buildMvpEnemy(): Enemy {
     statuses: [],
     distance: 0,
   };
+}
+
+/**
+ * MVP 敌人：elite 节点（亡灵骑士，100HP / 14atk / 5 护甲）
+ *
+ * 数值设计（无 Designer 裁定，暂定 MVP 基线，可配平）：
+ *   - HP 60 → 100（+67%，玩家需多 2-3 回合）
+ *   - atk 10 → 14（+40%，单次伤害压力提升）
+ *   - armor 0 → 5（首轮物理伤害被吸收，鼓励用高倍率牌型）
+ */
+function buildEliteEnemy(): Enemy {
+  return {
+    uid: 'mvp_elite_0',
+    configId: 'mvp_elite',
+    name: '亡灵骑士',
+    hp: 100,
+    maxHp: 100,
+    armor: 5,
+    attackDmg: 14,
+    combatType: 'warrior',
+    dropGold: 0,
+    dropRelic: false,
+    emoji: '🛡️',
+    statuses: [],
+    distance: 0,
+  };
+}
+
+/**
+ * MVP 敌人：boss 节点（深渊爬行者，180HP / 18atk / 10 护甲）
+ *
+ * 数值设计（BOSS-MVP 基线，等后续 Designer 裁定）：
+ *   - HP 100 → 180（+80%，BOSS 战更持久）
+ *   - atk 14 → 18（+29%，压力升级但不至于秒杀）
+ *   - armor 5 → 10（需要组合牌才能破防）
+ *   - name "深渊爬行者"：配合章节 BOSS 入场演出的世界观
+ */
+function buildBossEnemy(): Enemy {
+  return {
+    uid: 'mvp_boss_0',
+    configId: 'mvp_boss',
+    name: '深渊爬行者',
+    hp: 180,
+    maxHp: 180,
+    armor: 10,
+    attackDmg: 18,
+    combatType: 'warrior',
+    dropGold: 0,
+    dropRelic: false,
+    emoji: '👹',
+    statuses: [],
+    distance: 0,
+  };
+}
+
+/**
+ * 按战斗类型构建 MVP 敌人。normal/elite/boss 差异化通过独立构造函数落地，
+ * 未来接入章节数据后改为 buildMvpEnemyForNode(chapter, nodeType) 二维表。
+ *
+ * 兼容性：保留 buildMvpEnemy() 作为 normal 的别名，避免下游直启路径（BattleScene 无
+ * 参 init）立即断链；后续任务统一收口后可删别名。
+ */
+export function buildMvpEnemyForType(battleType: BattleType): Enemy {
+  switch (battleType) {
+    case 'boss': return buildBossEnemy();
+    case 'elite': return buildEliteEnemy();
+    case 'normal':
+    default: return buildNormalEnemy();
+  }
+}
+
+/** @deprecated 用 buildMvpEnemyForType('normal')；保留以兼容无参调用路径 */
+export function buildMvpEnemy(): Enemy {
+  return buildNormalEnemy();
 }
 
 /**

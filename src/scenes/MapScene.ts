@@ -313,7 +313,13 @@ export class MapScene extends Phaser.Scene {
 
     // 走 scene.start 硬切（而非 sleep/run）：Phaser Scene 实例复用特性下，硬切的成本低且路径单一；
     // BattleScene SHUTDOWN 时会把战果写入 game.registry，MapScene.create 回来时消费。
-    this.scene.start('BattleScene', { classId: this.classId });
+    //
+    // α-go 第 7 单 BOSS-MVP：把节点类型映射为 battleType 传下去
+    //   - enemy → 'normal'（BattleType 里用 'normal' 更语义）
+    //   - elite → 'elite'（未来差异化入口）
+    //   - boss  → 'boss'（触发 BossEntrance 演出 + 切 bgm_boss）
+    const battleType = targetNode.type === 'enemy' ? 'normal' : targetNode.type;
+    this.scene.start('BattleScene', { classId: this.classId, battleType });
   }
 
   /** wake 钩子（预留）：未来做 roundtrip 时会跑到这里 */
