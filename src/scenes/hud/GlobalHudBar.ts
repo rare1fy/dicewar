@@ -65,7 +65,8 @@ export class GlobalHudBar {
     const { width } = scene.scale;
 
     // 顶层容器，整条 HUD 一起移动/销毁
-    this.container = scene.add.container(0, 0).setDepth(8500);
+    // setScrollFactor(0) 使 HUD 固定在视口顶部，不随 MapScene 相机滚动位移
+    this.container = scene.add.container(0, 0).setDepth(8500).setScrollFactor(0);
 
     // 背景横条（半透明黑，低调且不抢视觉）
     const bg = scene.add.rectangle(0, 0, width, HUD_HEIGHT, 0x0b0b14, 0.85)

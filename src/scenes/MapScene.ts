@@ -84,6 +84,24 @@ export class MapScene extends Phaser.Scene {
   /** 正在等战斗结算，避免玩家快速点另一节点触发重入 */
   private isEnteringBattle: boolean = false;
 
+  /**
+   * 【地图滚动 + 拖拽状态】
+   * 采用"整张地图长条（高 = layers × LAYER_GAP）+ 相机垂直滚动"模式，参考原型 MapScreen.tsx 的 scroll 容器行为。
+   *   - drag.active：标记一次按下-移动的"拖动模式"；阈值 > DRAG_THRESHOLD 才算拖动，否则视为点击
+   *   - drag.startCamY / startPointerY：记录按下瞬间相机与指针 Y，拖动中用差值回写 cameras.main.scrollY
+   *   - drag.movedBy：按下至抬起累计位移；抬起时若 > DRAG_THRESHOLD → 吞掉即将冒泡的节点 pointerup 点击
+   * 手机触屏和桌面鼠标走同一套 pointer 事件，无需分支。
+   */
+  private drag: { active: boolean; startCamY: number; startPointerY: number; movedBy: number } = {
+    active: false, startCamY: 0, startPointerY: 0, movedBy: 0,
+  };
+  /** 滑过此阈值（像素）视为"拖动"而非"点击"；8px 在桌面和触屏都足够过滤抖动 */
+  private static readonly DRAG_THRESHOLD = 8;
+  /** 层间垂直间距（像素）。原 MVP 把 10-15 层压一屏每层 ~73px 太挤；拉到 160 后总高 ~2400 需要滚动查看 */
+  private static readonly LAYER_GAP = 160;
+  /** 地图总高（depth 展开后的绝对高度），由 setupMapLayout 计算 */
+  private mapContentHeight: number = 0;
+
   constructor() {
     super('MapScene');
   }
@@ -120,11 +138,16 @@ export class MapScene extends Phaser.Scene {
     //   readRunState 若 registry 缺失 → 按 classId 回退 maxHp 默认值（首场合理）
     this.hudBar = new GlobalHudBar(this, readRunState(this, this.classId as ClassId));
     this.drawTopBar();
+    // 先计算地图总高，再把相机的可滚动范围开出来 —— 之后 drawEdges/drawNodes 用到的 nodeCenter 已经是绝对坐标
+    this.setupMapLayout();
     this.drawEdges();
     this.drawNodes();
+    this.setupDrag();
 
     // 从战斗回来（scene.start 硬切路径）：直接在 create 里消费 registry 战果，不依赖 wake 事件
     this.consumeBattleResultIfAny();
+    // 把相机落到"当前节点/起点"居中，避免玩家进来看到一片空白（原型 scrollIntoView center 的等价实现）
+    this.centerOnCurrent(false);
 
     // wake 事件保留监听（将来做 sleep/run 软切时用，当前路径不会触发）
     this.events.on(Phaser.Scenes.Events.WAKE, this.onWake, this);
@@ -143,11 +166,12 @@ export class MapScene extends Phaser.Scene {
     // registry 清理唯一时机是战果消费完成后（见 consumeBattleResultIfAny 末尾的 remove）。
   }
 
-  /** 背景：深色底 + 径向暗角（复用 StartScene 套路，纯 Graphics） */
+  /** 背景：深色底 + 径向暗角（复用 StartScene 套路，纯 Graphics）
+   *  【相机滚动】背景绑定视口，不参与 camera.scrollY */
   private drawBackground(): void {
     const { width, height } = this.scale;
-    this.add.rectangle(width / 2, height / 2, width, height, 0x0a0812);
-    const vignette = this.add.graphics();
+    this.add.rectangle(width / 2, height / 2, width, height, 0x0a0812).setScrollFactor(0);
+    const vignette = this.add.graphics().setScrollFactor(0);
     vignette.fillGradientStyle(0x040306, 0x040306, 0x0a0812, 0x0a0812, 0.7, 0.7, 0, 0);
     vignette.fillRect(0, 0, width, height * 0.25);
   }
@@ -158,17 +182,18 @@ export class MapScene extends Phaser.Scene {
     const classLabel = this.classId === 'warrior' ? '战士'
                     : this.classId === 'mage' ? '法师'
                     : this.classId === 'rogue' ? '盗贼' : this.classId;
+    // 【相机滚动】顶栏三件套全部 setScrollFactor(0)，钉在视口上，不随地图上下滑
     this.add.text(24, 54, `职业：${classLabel}`, {
       fontFamily: 'Arial, sans-serif',
       fontSize: '20px',
       color: '#e5e7eb',
-    });
+    }).setScrollFactor(0);
     this.add.text(this.scale.width / 2, 54, '征途之路', {
       fontFamily: 'Arial, sans-serif',
       fontSize: '22px',
       color: '#fbbf24',
       fontStyle: 'bold',
-    }).setOrigin(0.5, 0);
+    }).setOrigin(0.5, 0).setScrollFactor(0);
 
     const backBtn = this.add.text(this.scale.width - 24, 54, '换职业', {
       fontFamily: 'Arial, sans-serif',
@@ -176,7 +201,7 @@ export class MapScene extends Phaser.Scene {
       color: '#ffffff',
       backgroundColor: '#475569',
       padding: { x: 10, y: 6 },
-    }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
+    }).setOrigin(1, 0).setScrollFactor(0).setInteractive({ useHandCursor: true });
     backBtn.on('pointerdown', () => {
       if (this.isEnteringBattle) return;
       // Verify A-1 修复：换职业等于"弃掉当前 run"，清 runState 避免旧局 HP/maxHp/gold 污染新局
@@ -228,9 +253,15 @@ export class MapScene extends Phaser.Scene {
     }).setOrigin(0.5);
     container.add([circle, label]);
 
-    container.setSize(style.radius * 2, style.radius * 2);
-    container.setInteractive(new Phaser.Geom.Circle(0, 0, style.radius), Phaser.Geom.Circle.Contains);
-    container.on('pointerdown', () => this.onNodeClick(node));
+    // 【命中区放大】style.radius 负责视觉，hitRadius 负责命中 —— 手机拇指 ~44px 对应 hitRadius +12 足够宽容
+    const hitRadius = style.radius + 12;
+    container.setSize(hitRadius * 2, hitRadius * 2);
+    container.setInteractive(new Phaser.Geom.Circle(0, 0, hitRadius), Phaser.Geom.Circle.Contains);
+    // pointerup 而非 pointerdown：和 setupDrag 的 movedBy 阈值判定配合 —— 按下即开始拖时不应触发节点点击
+    container.on('pointerup', () => {
+      if (this.drag.movedBy > MapScene.DRAG_THRESHOLD) return; // 拖动手势，不是点击
+      this.onNodeClick(node);
+    });
 
     this.nodeGfxMap.set(node.id, container);
     this.applyNodeState(node, this.deriveState(node));
@@ -267,12 +298,13 @@ export class MapScene extends Phaser.Scene {
     } else {
       circle.setStrokeStyle(2, 0xffffff, 0.4);
     }
-    // locked 节点关闭交互，available/current 保留点击
+    // locked 节点关闭交互，available/current 保留点击（命中半径同 drawOneNode 的 hitRadius）
     if (state === 'locked' || state === 'completed') {
       container.disableInteractive();
     } else {
+      const hitRadius = NODE_STYLE[node.type].radius + 12;
       container.setInteractive(
-        new Phaser.Geom.Circle(0, 0, NODE_STYLE[node.type].radius),
+        new Phaser.Geom.Circle(0, 0, hitRadius),
         Phaser.Geom.Circle.Contains,
       );
     }
@@ -285,15 +317,16 @@ export class MapScene extends Phaser.Scene {
     }
   }
 
-  /** 节点中心屏幕坐标：depth → y，getNodeX → x（getNodeX 返回 0-100 归一值） */
+  /**
+   * 节点中心"世界坐标"：每层固定 LAYER_GAP 间距展开，depth 0（起点）在最下、boss 在最上。
+   * 不再压缩到一屏 —— 总高 mapContentHeight，相机滚动区间由 setupMapLayout 控制。
+   * 世界坐标 → 屏幕坐标由 camera.scrollY 负责，GameObject 默认 scrollFactor=1 会自然跟随。
+   */
   private nodeCenter(node: MapNode): { x: number; y: number } {
-    const { width, height } = this.scale;
-    const topPad = 100;
-    const bottomPad = 80;
-    const usableH = height - topPad - bottomPad;
-    const maxDepth = this.nodes.reduce((m, n) => Math.max(m, n.depth), 0) || 1;
-    // depth 从下往上画（Boss 在顶端），更符合"征途向上"的直觉
-    const y = height - bottomPad - (node.depth / maxDepth) * usableH;
+    const { width } = this.scale;
+    // 世界 y：起点（depth=0）在 worldBottom 附近；boss 在最上；按 LAYER_GAP 均匀展开
+    const worldBottom = this.mapContentHeight - 160;
+    const y = worldBottom - node.depth * MapScene.LAYER_GAP;
 
     const leftPad = 60;
     const rightPad = 60;
@@ -367,5 +400,90 @@ export class MapScene extends Phaser.Scene {
     this.registry.remove('pendingBattleNodeId');
     this.isEnteringBattle = false;
     this.refreshAllNodes();
+    // 战斗胜利后 currentNodeId 已推进，相机平滑滚到新位置让玩家看清下一层可走节点
+    if (result === 'victory') this.centerOnCurrent(true);
+  }
+
+  // ============================================================================
+  // 【以下为 α-go 第 4 单后补：镜头跟随 / 拖拽滚动 / 命中区放大】
+  // 设计背景：原型 MapScreen.tsx 用 DOM overflow:auto + scrollIntoView(center)；Phaser 用 camera.scrollY 等价实现。
+  // ============================================================================
+
+  /**
+   * 计算地图总高，开相机可滚范围。
+   *   mapContentHeight = layers × LAYER_GAP + 顶底缓冲
+   *   camera bounds 纵向从 0 → mapContentHeight；横向不滚（后续要做横向地图再开 X 轴）
+   *   若 mapContentHeight 小于视口高（极端情况 depth=0），走"不滚动"分支避免 bounds 报错
+   */
+  private setupMapLayout(): void {
+    const { width, height } = this.scale;
+    const maxDepth = this.nodes.reduce((m, n) => Math.max(m, n.depth), 0) || 1;
+    // +1 是因为 depth 从 0 开始，共 maxDepth+1 层；头尾各留 200 像素缓冲
+    this.mapContentHeight = Math.max(height, (maxDepth + 1) * MapScene.LAYER_GAP + 400);
+    // camera bounds：world 坐标 y 从 0 到 mapContentHeight，相机 scrollY 可在 [0, mapContentHeight - height] 间移动
+    this.cameras.main.setBounds(0, 0, width, this.mapContentHeight);
+  }
+
+  /**
+   * 注册全局拖拽监听（scene.input.on，不依赖任何 GameObject）。
+   *   pointerdown  → 记录起始相机 Y + 指针 Y，movedBy 归零
+   *   pointermove  → 更新 movedBy 累计，若超阈值就 setScrollY 实时跟手
+   *   pointerup    → 重置 drag 态；节点自己的 pointerup 回调用 movedBy 判断是否吞掉点击
+   * 注意：这些监听 Scene 级别，走 scene.events 的 SHUTDOWN 会自动清理 scene.input 的所有监听，无需手动 off。
+   */
+  private setupDrag(): void {
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      this.drag.active = true;
+      this.drag.startPointerY = pointer.y;
+      this.drag.startCamY = this.cameras.main.scrollY;
+      this.drag.movedBy = 0;
+    });
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (!this.drag.active) return;
+      const delta = pointer.y - this.drag.startPointerY;
+      this.drag.movedBy = Math.abs(delta);
+      if (this.drag.movedBy > MapScene.DRAG_THRESHOLD) {
+        // 跟手：相机向"与手指相反"方向移动 → 视觉上地图跟手指走
+        this.cameras.main.setScroll(0, this.drag.startCamY - delta);
+      }
+    });
+    this.input.on('pointerup', () => {
+      this.drag.active = false;
+      // movedBy 保留到下一次 pointerdown 才清零；节点 pointerup 回调在此之后触发时读得到
+    });
+    // 指针意外离开 canvas：同 pointerup，避免拖拽状态卡死
+    this.input.on('pointerupoutside', () => {
+      this.drag.active = false;
+    });
+  }
+
+  /**
+   * 把相机纵向居中到 currentNodeId 的世界 y；没有 currentNode 时居中到 depth=0 的起点。
+   * @param animate true 用 tween 平滑滚（0.4s）；false 瞬移（进场 / newRun 用）
+   */
+  private centerOnCurrent(animate: boolean): void {
+    const { height } = this.scale;
+    const focusNode =
+      (this.currentNodeId && this.nodes.find(n => n.id === this.currentNodeId)) ||
+      this.nodes.find(n => n.depth === 0) ||
+      this.nodes[0];
+    if (!focusNode) return;
+    const { y: worldY } = this.nodeCenter(focusNode);
+    // 让 focus 节点出现在视口中央：scrollY = worldY - height/2
+    const targetScrollY = Phaser.Math.Clamp(
+      worldY - height / 2,
+      0,
+      Math.max(0, this.mapContentHeight - height),
+    );
+    if (!animate) {
+      this.cameras.main.setScroll(0, targetScrollY);
+      return;
+    }
+    this.tweens.add({
+      targets: this.cameras.main,
+      scrollY: targetScrollY,
+      duration: 400,
+      ease: 'Cubic.easeOut',
+    });
   }
 }
