@@ -321,9 +321,12 @@ export class ClassSelectScene extends Phaser.Scene {
       onComplete: () => {
         const classId = this.selectedClass!;
         // α-go 第 4 单：确认职业后进入地图；
-        // newRun:true 是双重语义 —— (1) 让 MapScene 重开地图（清 nodes/currentNodeId），
+        // newRun:true 是三重语义 —— (1) 让 MapScene 重开地图（清 nodes/currentNodeId），
         // (2) 清 registry 中可能残留的 Battle↔Map 回流协议键（pendingBattleNodeId / lastBattleResult），
         //     避免上一局战斗中途退出时的"僵尸回流"数据污染新局。
+        // (3) α-go 第 6 单 LOOT：顺手清 runRelics，保证新局的 BattleScene.buildInitialSnapshot
+        //     走"按职业的 starter relic"分支，而不是继承上一局的累积遗物池。
+        this.registry.remove('runRelics');
         this.scene.start('MapScene', { classId, newRun: true });
       },
     });

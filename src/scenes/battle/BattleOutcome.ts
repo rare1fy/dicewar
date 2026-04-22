@@ -33,17 +33,22 @@ export interface BattleOutcomeContext {
   getBanner: () => Phaser.GameObjects.Container | null;
   /** 写横幅（模块创建后回填 Scene） */
   setBanner: (b: Phaser.GameObjects.Container | null) => void;
-  /** 4 个回流按钮回调 */
+  /** 回流按钮回调 */
   onRestart: () => void;
   onBackToClassSelect: () => void;
   onBackToStart: () => void;
   onBackToMap: () => void;
+  /** α-go 第 6 单 LOOT：胜利 + 从 Map 进入时的"选战利品"路由（其他分支不用） */
+  onBackToLoot: () => void;
 }
 
 /**
  * 弹胜负横幅。与 Scene 解耦：通过 ctx 读写状态，不直接访问 Scene 字段。
- * - 从 Map 进入时（registry.pendingBattleNodeId 存在）：首按钮文案 = "返回地图"
- * - 否则：首按钮 = "再战一局"
+ *
+ * 首按钮路由矩阵（α-go 第 6 单 LOOT 接入后）：
+ *   - 胜利 + fromMap  → "选择战利品" → LootScene（跳转后玩家 3 选 1 或 Skip，再回 Map）
+ *   - 失败 + fromMap  → "返回地图"   → MapScene（失败不给 Loot，直接保留地图进度）
+ *   - 独立战斗（非 fromMap，开发者菜单直入）→ "再战一局" → restartBattle
  */
 export function showOverBanner(
   ctx: BattleOutcomeContext,
@@ -51,11 +56,27 @@ export function showOverBanner(
   titleColor: string,
 ): void {
   if (ctx.getBanner()) return; // 防重入
-  playSound(title === '胜利' ? 'victory' : 'death');
+  const isVictory = title === '胜利';
+  playSound(isVictory ? 'victory' : 'death');
   const fromMap = ctx.scene.registry.get('pendingBattleNodeId') != null;
+
+  // 首按钮文案 + 回调：按 (victory, fromMap) 二维分支
+  let restartLabel: string;
+  let onRestart: () => void;
+  if (fromMap && isVictory) {
+    restartLabel = '选择战利品';
+    onRestart = () => ctx.onBackToLoot();
+  } else if (fromMap) {
+    restartLabel = '返回地图';
+    onRestart = () => ctx.onBackToMap();
+  } else {
+    restartLabel = '再战一局';
+    onRestart = () => ctx.onRestart();
+  }
+
   const banner = showBattleGameOverBanner(ctx.scene, title, titleColor, {
-    restartLabel: fromMap ? '返回地图' : '再战一局',
-    onRestart: () => fromMap ? ctx.onBackToMap() : ctx.onRestart(),
+    restartLabel,
+    onRestart,
     onBackToClassSelect: () => ctx.onBackToClassSelect(),
     onBackToStart: () => ctx.onBackToStart(),
   });

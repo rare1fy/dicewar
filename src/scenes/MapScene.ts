@@ -95,6 +95,8 @@ export class MapScene extends Phaser.Scene {
       // 同步清 registry 中任何可能残留的战斗回流键（例如玩家上一局中途退出没走完回流）
       this.registry.remove('pendingBattleNodeId');
       this.registry.remove('lastBattleResult');
+      // α-go 第 6 单 LOOT：顺手清 run-scoped 遗物池（双保险，ClassSelectScene 已清一次）
+      this.registry.remove('runRelics');
     }
   }
 

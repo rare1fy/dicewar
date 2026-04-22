@@ -153,8 +153,14 @@ export class BattleScene extends Phaser.Scene {
   // ==========================================================================
   private buildInitialSnapshot(): BattleStateSnapshot {
     const game = createInitialGameState(this.classId);
-    // α-go 多职业：按 classId 取职业起手遗物（见 BattleMvpData.STARTER_RELIC_IDS）
-    game.relics = buildMvpRelics(this.classId);
+    // α-go 第 6 单 LOOT：run-scoped 遗物池优先 —— 如果玩家在整局中已经通过 Loot 累积了遗物，
+    // 读 registry.runRelics 作为本场战斗的遗物基线；首场战斗（runRelics 为空）回退到
+    // BattleMvpData 里按职业配的 starter relic（见 STARTER_RELIC_IDS）。
+    // ClassSelectScene 点"开始新局"时会清 runRelics，保证新局重新走 starter 路径。
+    const runRelics = (this.registry.get('runRelics') as typeof game.relics | undefined);
+    game.relics = runRelics && runRelics.length > 0
+      ? [...runRelics]
+      : buildMvpRelics(this.classId);
 
     const initialDice: Die[] = [];
 
@@ -460,6 +466,7 @@ export class BattleScene extends Phaser.Scene {
       onBackToClassSelect: () => this.backToClassSelect(),
       onBackToStart: () => this.backToStart(),
       onBackToMap: () => this.backToMap(),
+      onBackToLoot: () => this.backToLoot(),
     };
   }
 
@@ -494,8 +501,13 @@ export class BattleScene extends Phaser.Scene {
     if (this.isLeavingScene) return; // R3：防 3 按钮连点重入
     this.isLeavingScene = true;
     this.stopBgm(); // BGM 显式清理（SHUTDOWN 也会兜底，幂等安全）
-    if (targetKey === null) this.scene.restart();
-    else this.scene.start(targetKey);
+    if (targetKey === null) {
+      this.scene.restart({ classId: this.classId });
+    } else {
+      // 统一透传 classId：MapScene/LootScene/ClassSelectScene/StartScene 都能安全接收
+      // （各自 init 内部只认自己关心的字段，多余字段忽略；StartScene 无 init 无影响）
+      this.scene.start(targetKey, { classId: this.classId });
+    }
   }
 
   private restartBattle(): void { this.leaveToScene(null); }
@@ -503,6 +515,17 @@ export class BattleScene extends Phaser.Scene {
   private backToStart(): void { this.leaveToScene('StartScene'); }
   /** 从 Map 进入的战斗胜败后回 Map；MapScene 在 create 里读 registry.lastBattleResult 更新节点状态 */
   private backToMap(): void { this.leaveToScene('MapScene'); }
+  /**
+   * α-go 第 6 单 LOOT：胜利 + 从 Map 进入 → 去奖励场景。
+   * 在离场前把本场战斗结束时的 relics 数组写回 registry.runRelics，
+   * 让 LootScene 的"已持有遗物排除"拿到最新状态（覆盖 buildInitialSnapshot 时读到的那份）。
+   * 若将来战斗中能获得遗物（on_kill / on_boss），relics 会被 BattleState 更新，本路径会自动带新遗物。
+   */
+  private backToLoot(): void {
+    const relics = this.battleState.getSnapshot().game.relics;
+    this.registry.set('runRelics', [...relics]);
+    this.leaveToScene('LootScene');
+  }
 
   /**
    * 战斗结算态一次性复位：挂在 SHUTDOWN 事件统一触发，
