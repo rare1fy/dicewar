@@ -75,6 +75,16 @@ export class BootScene extends Phaser.Scene {
       padding: { x: 20, y: 12 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     toBattleBtn.on("pointerdown", () => this.scene.start("BattleScene"));
+
+    // 返回开始界面（StartScene 已作为首屏；此处保留回流入口，方便调试来回切换）
+    const backToStart = this.add.text(centerX, 100, "← 返回开始界面", {
+      fontFamily: "Arial, sans-serif",
+      fontSize: "20px",
+      color: "#a88ac8",
+      backgroundColor: "#2b2633",
+      padding: { x: 16, y: 8 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    backToStart.on("pointerdown", () => this.scene.start("StartScene"));
   }
 
   update(): void {
@@ -114,4 +124,4 @@ export class BootScene extends Phaser.Scene {
       },
     });
   }
-}
+}

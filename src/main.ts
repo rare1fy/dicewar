@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { StartScene } from "@/scenes/StartScene";
 import { BootScene } from "@/scenes/BootScene";
 import { HandTestScene } from "@/scenes/HandTestScene";
 import { BattleScene } from "@/scenes/BattleScene";
@@ -16,7 +17,8 @@ const config: Phaser.Types.Core.GameConfig = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [BootScene, HandTestScene, BattleScene],
+  // StartScene 放第一位作为首屏；BootScene 保留为"开发者菜单"（可从 StartScene 底部链接进入）
+  scene: [StartScene, BootScene, HandTestScene, BattleScene],
   render: {
     pixelArt: true,
     antialias: false,
