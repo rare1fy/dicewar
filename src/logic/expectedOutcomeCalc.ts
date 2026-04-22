@@ -125,13 +125,12 @@ export function calculateExpectedOutcome(params: CalculateExpectedOutcomeParams)
       pointSum: X,
       hasPlayedThisTurn: (game.comboCount || 0) > 0,
     });
-    // PHASER-FIX-ARITHMETIC-GAUGE-DICECOUNT：
-    //   diceCount 应代表最终有效牌型长度，非 selected.length。
-    //   dimension_crush 把 3顺升成 4顺时，arithmetic_gauge 等按 diceCount 取倍率的遗物
-    //   应读升档后的有效长度（4），而非原始选骰数（3）。
+    // PHASER-FIX-ARITHMETIC-GAUGE-DICECOUNT（方向 B）：
+    //   effectiveDiceCount 代表升档后的最终有效牌型长度。
+    //   arithmetic_gauge 读 effectiveDiceCount，不污染 diceCount / selectedDiceCount。
     const effectiveStraightLen = deriveStraightLen(activeHands);
     if (effectiveStraightLen > selected.length) {
-      relicCtx.diceCount = effectiveStraightLen;
+      relicCtx.effectiveDiceCount = effectiveStraightLen;
     }
 
     const res = relic.effect(relicCtx);

@@ -116,7 +116,7 @@ export const arithmeticGauge: Relic = {
   effect: (ctx) => {
     const ht = ctx.handType || '';
     if (!ht.includes('顺')) return {};
-    const count = ctx.diceCount || 0;
+    const count = ctx.effectiveDiceCount ?? ctx.diceCount ?? 0;
     const multMap: Record<number, number> = { 3: 1.5, 4: 2.0, 5: 3.0, 6: 5.0 };
     return { multiplier: multMap[count] || 1 };
   },

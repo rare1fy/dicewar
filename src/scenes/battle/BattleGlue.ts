@@ -241,13 +241,11 @@ export function triggerOnPlayRelics(params: {
     selectedDice,
     pointSum,
     hasPlayedThisTurn: false, // 触发时机：本次出牌"即将"结算，此前未出过
+    // PHASER-FIX-ARITHMETIC-GAUGE-DICECOUNT（方向 B）：
+    //   effectiveDiceCount 代表升档后的最终有效牌型长度。
+    //   arithmetic_gauge 等按长度取倍率的遗物读 effectiveDiceCount，不污染 diceCount 原始语义。
+    effectiveDiceCount: straightLen > 0 ? straightLen : selectedDice.length,
   });
-
-  // diceCount 修正：若是顺子且升档后长度 > 选骰数，override 为真实顺子长度
-  // （buildRelicContext 目前没独立 straightLen 字段，用 ctx 派生值后覆盖是零侵入方案）
-  if (straightLen > selectedDice.length) {
-    ctx.diceCount = straightLen;
-  }
 
   const agg: RelicEffectAggregate = { multiplier: 1, heal: 0 };
 

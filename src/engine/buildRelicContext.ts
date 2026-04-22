@@ -27,6 +27,8 @@ export interface BuildRelicContextParams {
   overkillDamage?: number;
   /** 本次重投是否为卖血重投（on_reroll 触发时传入） */
   isBloodReroll?: boolean;
+  /** 升档后的有效牌型长度（由 deriveStraightLen 推导）。不传则等于 selected.length。 */
+  effectiveDiceCount?: number;
 }
 
 /**
@@ -38,7 +40,7 @@ export const buildRelicContext = (params: BuildRelicContextParams): RelicContext
   const {
     game, dice, targetEnemy, rerollsThisTurn,
     handType, selectedDice, pointSum, hasPlayedThisTurn,
-    overkillDamage, isBloodReroll,
+    overkillDamage, isBloodReroll, effectiveDiceCount,
   } = params;
 
   const selected = selectedDice || dice.filter(d => !d.spent);
@@ -79,6 +81,7 @@ export const buildRelicContext = (params: BuildRelicContextParams): RelicContext
     // 免费重Roll追踪
     freeRerollsUsed: Math.max(0, (game.freeRerollsPerTurn || 0) - (game.freeRerollsLeft || 0)),
     selectedDiceCount: selected.length,
+    effectiveDiceCount: effectiveDiceCount ?? selected.length,
 
     // 地图进度
     currentDepth: game.map?.find(n => n.id === game.currentNodeId)?.depth || 0,

@@ -49,6 +49,8 @@ export interface RelicContext {
   // 免费重Roll追踪
   freeRerollsUsed?: number;
   selectedDiceCount?: number;
+  /** 升档后的最终有效牌型长度（如 dimension_crush 把 3顺升成 4顺，此值为 4）。若未升档则等于 diceCount。arithmetic_gauge 等按长度取倍率的遗物应读此字段。 */
+  effectiveDiceCount?: number;
   // 地图进度
   currentDepth?: number;           // 当前节点深度
   floorsCleared?: number;          // 已通过的战斗层数（层厅征服者用）
