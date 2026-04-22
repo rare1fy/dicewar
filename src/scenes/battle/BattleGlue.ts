@@ -210,13 +210,11 @@ export const EMPTY_RELIC_AGGREGATE: RelicEffectAggregate = { multiplier: 1, heal
  *
  * δ-1 作用域：只聚合 multiplier / heal 两个字段。其它字段被静默丢弃（未来扩展遗物时同步追加映射）。
  *
- * diceCount 修正（Verify δ-1 REJECT 修复）：
- *   - `dimension_crush` 升档后，`hand.activeHands` 可能把 3 颗骰子的顺子认定为 `4顺`；
- *   - 若直接把 `selectedDice.length` 喂给 `buildRelicContext.diceCount`，
- *     `arithmetic_gauge` 会按原始档位（3顺系数 1.5x）取倍率，而不是升档后（4顺系数 2.0x）。
- *   - 当 handType 含"顺"时用升档后的真实顺子长度覆盖 diceCount。
- *   - ⚠️ 这与原版 dicehero2 的 expectedOutcomeCalc.ts / postPlayEffects.ts 行为**不一致**（那边也传原始 selected.length），
- *     Phaser 仓在此点**领先修复**。见 TASKS.md 的 PHASER-FIX-ARITHMETIC-GAUGE-DICECOUNT（待 Designer 追认）。
+ * effectiveDiceCount 推导：
+ *   - 当 hand 含"顺"时，取 deriveStraightLen 升档后的真实顺子长度；
+ *   - 否则取 selectedDice.length（原始出牌数）。
+ *   - arithmetic_gauge 等按长度取倍率的遗物读 ctx.effectiveDiceCount，
+ *     不污染 ctx.diceCount 原始语义（已在 PHASER-FIX-ARITHMETIC-GAUGE-DICECOUNT 落地）。
  */
 export function triggerOnPlayRelics(params: {
   relics: Relic[];

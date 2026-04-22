@@ -23,10 +23,16 @@ export class EnemyView {
   private emojiText: Phaser.GameObjects.Text;
   private intentText: Phaser.GameObjects.Text;
 
+  // 面板尺寸（构造时记录，用于锚点计算）
+  private panelWidth: number;
+  private panelHeight: number;
+
   constructor(scene: Phaser.Scene, config: EnemyViewConfig) {
+    this.panelWidth = config.width;
+    this.panelHeight = 140;
     this.container = scene.add.container(config.x, config.y);
 
-    const panelBg = scene.add.rectangle(0, 0, config.width, 140, 0x1f2937).setOrigin(0, 0).setStrokeStyle(2, 0x4b5563);
+    const panelBg = scene.add.rectangle(0, 0, this.panelWidth, this.panelHeight, 0x1f2937).setOrigin(0, 0).setStrokeStyle(2, 0x4b5563);
 
     // 敌人 emoji + 名字
     this.emojiText = scene.add.text(16, 12, '', {
@@ -82,11 +88,12 @@ export class EnemyView {
 
   /**
    * δ-2 演出用：返回敌人面板的世界坐标中心（飘字起点）
+   * 基于面板实际尺寸计算，不硬编码偏移。
    */
   public getWorldCenter(): { x: number; y: number } {
     return {
-      x: this.container.x + 60,
-      y: this.container.y + 40,
+      x: this.container.x + this.panelWidth / 2,
+      y: this.container.y + this.panelHeight / 2,
     };
   }
 

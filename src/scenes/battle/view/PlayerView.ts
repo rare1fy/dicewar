@@ -23,10 +23,16 @@ export class PlayerView {
   private playsText: Phaser.GameObjects.Text;
   private relicsText: Phaser.GameObjects.Text;
 
+  // 面板尺寸（构造时记录，用于锚点计算）
+  private panelWidth: number;
+  private panelHeight: number;
+
   constructor(scene: Phaser.Scene, config: PlayerViewConfig) {
+    this.panelWidth = config.width;
+    this.panelHeight = 140;
     this.container = scene.add.container(config.x, config.y);
 
-    const panelBg = scene.add.rectangle(0, 0, config.width, 140, 0x111827).setOrigin(0, 0).setStrokeStyle(2, 0x374151);
+    const panelBg = scene.add.rectangle(0, 0, this.panelWidth, this.panelHeight, 0x111827).setOrigin(0, 0).setStrokeStyle(2, 0x374151);
 
     const title = scene.add.text(12, 10, '玩家 · 战士', {
       fontFamily: 'Arial, sans-serif',
@@ -85,11 +91,12 @@ export class PlayerView {
 
   /**
    * δ-2 演出用：返回玩家面板的世界坐标中心（飘字 + 回血起点）
+   * 基于面板实际尺寸计算，不硬编码偏移。
    */
   public getWorldCenter(): { x: number; y: number } {
     return {
-      x: this.container.x + 60,
-      y: this.container.y + 50,
+      x: this.container.x + this.panelWidth / 2,
+      y: this.container.y + this.panelHeight / 2,
     };
   }
 
