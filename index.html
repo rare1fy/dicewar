@@ -32,7 +32,12 @@
       }
 
       html, body { margin: 0; padding: 0; background: #1a1a1a; overflow: hidden; width: 100%; height: 100%; font-family: 'FusionPixel', sans-serif; }
-      #game { width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+      /* Phaser ScaleManager（mode: FIT + autoCenter: CENTER_BOTH）会自己处理 canvas 位置与缩放。
+         #game 不能再用 flex 居中 —— 否则 canvas 会被 flex 二次位移，Phaser 的 getBoundingClientRect
+         与实际 pointer DOM 坐标错位，导致自定义 hitArea 的点击判定全部偏移（ClassSelectScene 卡片
+         在 y=220/376/532 偏离中心较远时最明显，近似于"完全点不到"）。
+         只保留全屏占位 + position:relative 让 Phaser 绝对定位 canvas 到正确位置。 */
+      #game { width: 100vw; height: 100vh; position: relative; }
     </style>
   </head>
   <body>

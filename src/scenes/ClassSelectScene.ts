@@ -40,7 +40,6 @@ export class ClassSelectScene extends Phaser.Scene {
   }
 
   create(): void {
-    console.log('[ClassSelect] create start, input enabled =', this.input.enabled, 'topOnly =', (this.input as any).topOnly);
     this.drawBackground();
     bakeAllPixelDice(this);
 
@@ -165,9 +164,7 @@ export class ClassSelectScene extends Phaser.Scene {
       Phaser.Geom.Rectangle.Contains,
     );
 
-    console.log('[ClassSelect] card bound', classId, 'at y=', y, 'interactive=', !!(container as any).input);
     container.on('pointerover', () => {
-      console.log('[ClassSelect] pointerover', classId);
       if (this.selectedClass !== classId) bg.setStrokeStyle(3, Phaser.Display.Color.HexStringToColor(cls.color).color, 0.7);
       this.game.canvas.style.cursor = 'pointer';
     });
@@ -176,7 +173,6 @@ export class ClassSelectScene extends Phaser.Scene {
       this.game.canvas.style.cursor = 'default';
     });
     container.on('pointerdown', () => {
-      console.log('[ClassSelect] pointerdown', classId);
       playSound('select');
       this.selectClass(classId);
     });
