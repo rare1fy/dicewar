@@ -1,4 +1,4 @@
-/**
+﻿/**
  * battleContexts.ts - Phaser 版战斗上下文接口集合
  *
  * 原 React 版用 React.MutableRefObject / React.Dispatch<SetStateAction> 描述回调入参。
@@ -16,7 +16,7 @@ import type { EnemyQuotes } from '../config/enemies';
 
 /**
  * 可变容器 —— 替代 React.MutableRefObject。
- * TODO[PHASER-UI-01]: connect to scene（由场景持有实际引用）
+ * UI-01 DONE: BattleState refs.xxx = { current } 模式
  */
 export interface MutableRef<T> {
   current: T;
@@ -25,7 +25,7 @@ export interface MutableRef<T> {
 /**
  * State setter —— 替代 React.Dispatch<React.SetStateAction<T>>。
  * 支持直接传新值或传更新函数。
- * TODO[PHASER-UI-01]: connect to scene（由场景实现 setter，内部直接改 gameRef.current 并刷新 UI）
+ * UI-01 DONE: BattleState.setters 实现顺序执行 updater
  */
 export type StateSetter<T> = (next: T | ((prev: T) => T)) => void;
 
