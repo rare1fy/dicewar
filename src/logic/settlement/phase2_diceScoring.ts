@@ -27,6 +27,7 @@ export async function runPhase2DiceScoring(ctx: SettlementContext): Promise<{
 }> {
   const {
     game, selected, outcome, straightUpgrade,
+    pairAsTriplet,
     setSettlementData, setSettlementPhase,
     addLog, addToast,
     playSound, playSettlementTick, playMultiplierTick,
@@ -102,7 +103,7 @@ export async function runPhase2DiceScoring(ctx: SettlementContext): Promise<{
 
   // 如果发生了磁吸，也需要重新计算牌型和伤害（和分裂一样的逻辑）
   if (magnetOccurred && !splitOccurred) {
-    const newHandResult = checkHands(settleDice, { straightUpgrade });
+    const newHandResult = checkHands(settleDice, { straightUpgrade, pairAsTriplet });
     const newBestHand = newHandResult.bestHand;
     if (newBestHand !== outcome.bestHand) {
       addLog(`磁吸改变了牌型！${outcome.bestHand} → ${newBestHand}`);
@@ -139,7 +140,7 @@ export async function runPhase2DiceScoring(ctx: SettlementContext): Promise<{
     await new Promise(r => setTimeout(r, 500));
   }
   if (splitOccurred) {
-    const newHandResult = checkHands(settleDice, { straightUpgrade });
+    const newHandResult = checkHands(settleDice, { straightUpgrade, pairAsTriplet });
     const newBestHand = newHandResult.bestHand;
     if (newBestHand !== outcome.bestHand) {
       addLog(`分裂改变了牌型！${outcome.bestHand} → ${newBestHand}`);

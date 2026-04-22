@@ -62,8 +62,8 @@ export interface PlayOutcomePatch {
  *   - 走 engine/buildSettlementInputs 唯一入口（契约见 logic/postPlayEffects.ts PostPlayContext 注释）
  */
 export function evaluateHand(selected: Die[], relics: Relic[]): HandResult {
-  const { straightUpgrade } = buildSettlementInputs(relics);
-  return checkHands(selected, { straightUpgrade });
+  const { straightUpgrade, pairAsTriplet } = buildSettlementInputs(relics);
+  return checkHands(selected, { straightUpgrade, pairAsTriplet });
 }
 
 /**

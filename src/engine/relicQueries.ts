@@ -60,6 +60,11 @@ export const hasBloodRerollRelic = (relics: Relic[]): boolean =>
 export const getStraightUpgrade = (relics: Relic[]): number =>
   hasRelic(relics, 'dimension_crush') ? 1 : 0;
 
+// --- 万象归一（universal_pair）---
+/** 万象归一遗物是否生效（pairAsTriplet） */
+export const hasPairAsTriplet = (relics: Relic[]): boolean =>
+  sumPassiveRelicValue(relics, 'pairAsTriplet') > 0;
+
 // --- 灞傚巺寰佹湇鑰咃紙floor_conqueror锛?--
 /** 宸查€氬叧灞傛暟 */
 export const getFloorsCleared = (relics: Relic[]): number =>

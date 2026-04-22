@@ -29,6 +29,8 @@ export interface SettlementContext {
    * 契约：必须通过 engine/buildSettlementInputs.ts 的 buildSettlementInputs(game.relics).straightUpgrade 注入，禁止散写。
    */
   straightUpgrade: number;
+  /** 对子视为三条结算（万象归一遗物）。PHASER-FIX-STRAIGHT-PENDING-2。 */
+  pairAsTriplet: boolean;
   isAoeActive: boolean;
 
   // Callbacks — React setState 稳定引用

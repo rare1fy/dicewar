@@ -15,7 +15,7 @@
  */
 
 import type { Relic } from '../types/game';
-import { getStraightUpgrade } from './relicQueries';
+import { getStraightUpgrade, hasPairAsTriplet } from './relicQueries';
 
 /**
  * 结算/出牌阶段的"遗物派生标量"集合
@@ -31,6 +31,11 @@ export interface SettlementInputs {
    * 已成立的顺子 straightLen += straightUpgrade，封顶 6顺。
    */
   straightUpgrade: number;
+  /**
+   * 对子视为三条结算（万象归一遗物）。
+   * PHASER-FIX-STRAIGHT-PENDING-2：由 checkHands(dice, { pairAsTriplet }) 消费。
+   */
+  pairAsTriplet: boolean;
 }
 
 /**
@@ -41,5 +46,6 @@ export interface SettlementInputs {
 export function buildSettlementInputs(relics: Relic[]): SettlementInputs {
   return {
     straightUpgrade: getStraightUpgrade(relics),
+    pairAsTriplet: hasPairAsTriplet(relics),
   };
 }

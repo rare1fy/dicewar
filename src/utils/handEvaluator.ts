@@ -1,10 +1,12 @@
 import { Die, HandType, HandResult } from '../types/game';
 import { getDiceDef } from '../data/dice';
 
-export const checkHands = (dice: Die[], options?: { straightUpgrade?: number }): HandResult => {
+export const checkHands = (dice: Die[], options?: { straightUpgrade?: number; pairAsTriplet?: boolean }): HandResult => {
   // [FIXED PHASER-FIX-STRAIGHT-UPGRADE 2026-04-21] 消费 straightUpgrade：顺子长度升档，6顺封顶。
   // Designer 裁定口径：仅做顺子系长度升档（顺子→4顺→5顺→6顺封顶），不可升成元素顺/皇家元素顺。
   const straightUpgrade = Math.max(0, options?.straightUpgrade ?? 0);
+  // PHASER-FIX-STRAIGHT-PENDING-2：对子满足三条判型门槛（万象归一遗物）
+  const hasPairAsTriplet = options?.pairAsTriplet ?? false;
   if (dice.length === 0) return { bestHand: '普通攻击', allHands: [], activeHands: ['普通攻击'] };
 
   // ignoreForHandType: 镜像骰子等不参与牌型判定，但其点数仍计入总点数
@@ -50,6 +52,8 @@ export const checkHands = (dice: Die[], options?: { straightUpgrade?: number }):
   // 3+3 = 6颗骰子，两种点数各3颗 → 识别为葫芦（超级三条）
   if (maxCount >= 3 && sortedCounts.length >= 2 && sortedCounts[1] >= 3 && dice.length === 6) hands.add('葫芦');
   if (maxCount === 2 && dice.length === 2) hands.add('对子');
+  // PHASER-FIX-STRAIGHT-PENDING-2：对子满足三条判型门槛
+  if (hasPairAsTriplet && maxCount === 2 && dice.length === 2) hands.add('三条');
   if (isFullHouse && dice.length === 5) hands.add('葫芦');
   // 4+2 = 6颗葫芦
   if (sortedCounts.length >= 2 && sortedCounts[0] === 4 && sortedCounts[1] === 2 && dice.length === 6) hands.add('葫芦');
@@ -94,6 +98,8 @@ export const checkHands = (dice: Die[], options?: { straightUpgrade?: number }):
   else if (isThreePair && dice.length === 6) { activeHands.push('三连对'); hasBaseHand = true; }
   else if (isTwoPair && dice.length === 4) { activeHands.push('连对'); hasBaseHand = true; }
   else if (maxCount === 2 && dice.length === 2) { activeHands.push('对子'); hasBaseHand = true; }
+  // PHASER-FIX-STRAIGHT-PENDING-2：对子视为三条结算
+  if (hasPairAsTriplet && maxCount === 2 && dice.length === 2 && !activeHands.includes('三条')) { activeHands.push('三条'); hasBaseHand = true; }
 
   // 顺子可叠加（按长度取最高）
   if (isStraight) {

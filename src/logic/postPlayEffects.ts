@@ -41,6 +41,8 @@ export interface PostPlayContext {
    * 契约：必须通过 engine/buildSettlementInputs.ts 的 buildSettlementInputs(game.relics).straightUpgrade 注入，禁止散写。
    */
   straightUpgrade: number;
+  /** 对子视为三条结算（万象归一遗物）。PHASER-FIX-STRAIGHT-PENDING-2。 */
+  pairAsTriplet: boolean;
 
   // Callbacks
   setGame: StateSetter<GameState>;
@@ -72,7 +74,7 @@ export function executePostPlayEffects(ctx: PostPlayContext): void {
   const {
     game, gameRef, enemies, dice, settleDice, outcome,
     hasAoe, targetUid, finalEnemyHp,
-    currentCombo, bestHand, rerollCount, straightUpgrade,
+    currentCombo, bestHand, rerollCount, straightUpgrade, pairAsTriplet,
     setGame, setEnemies, setDice, setRerollCount,
     addFloatingText, addToast, addLog, playSound,
     setEnemyEffectForUid,
@@ -100,7 +102,7 @@ export function executePostPlayEffects(ctx: PostPlayContext): void {
     }
   }
   // === 洞察弱点检测（使用结算演出后的最终数据） ===
-  const finalHandResult = checkHands(settleDice, { straightUpgrade });
+  const finalHandResult = checkHands(settleDice, { straightUpgrade, pairAsTriplet });
   const totalDiceInHand = dice.filter(d => !d.spent).length;
   setGame(prev => {
     const newPlaysWave = (prev.playsThisWave || 0) + 1;
