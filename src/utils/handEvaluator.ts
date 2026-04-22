@@ -213,3 +213,23 @@ export const findHandCandidates = (allDice: Die[], selectedId?: number): Set<num
 
   return result;
 };
+
+/**
+ * 从 activeHands 推导"升档后的真实顺子长度"。
+ *   activeHands 中 `6顺/5顺/4顺/顺子(=3顺)` 是互斥的，最多出现一个。
+ *   不是顺子返回 0。
+ *
+ * 用途：修复 `arithmetic_gauge` + `dimension_crush` 组合场景下
+ *   `buildRelicContext.diceCount` 仍然是原始 `selected.length`（未升档）
+ *   导致 arithmetic_gauge 按原始档位取倍率的 bug。
+ *
+ * PHASER-FIX-ARITHMETIC-GAUGE-DICECOUNT：diceCount 应代表最终有效牌型长度，
+ *   非 selected.length。此函数提供跨消费点的一致推导。
+ */
+export function deriveStraightLen(activeHands: readonly string[]): number {
+  if (activeHands.includes('6顺')) return 6;
+  if (activeHands.includes('5顺')) return 5;
+  if (activeHands.includes('4顺')) return 4;
+  if (activeHands.includes('顺子')) return 3;
+  return 0;
+}

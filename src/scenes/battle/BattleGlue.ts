@@ -28,7 +28,7 @@
 
 import type { Die, Enemy, StatusEffect, HandResult, GameState, Relic } from '../../types/game';
 import type { RelicEffect } from '../../types/relics';
-import { checkHands } from '../../utils/handEvaluator';
+import { checkHands, deriveStraightLen } from '../../utils/handEvaluator';
 import { HAND_TYPES } from '../../data/handTypes';
 import { getEffectiveAttackDmg } from '../../logic/attackCalc';
 import { isAoeHand } from '../../logic/battleHelpers';
@@ -202,23 +202,6 @@ export interface RelicEffectAggregate {
 export const EMPTY_RELIC_AGGREGATE: RelicEffectAggregate = { multiplier: 1, heal: 0 };
 
 /**
- * 从牌型结果推导"升档后的真实顺子长度"。
- *   activeHands 中 `6顺/5顺/4顺/顺子(=3顺)` 是互斥的，最多出现一个。
- *   不是顺子返回 0。
- *
- * 用途：修复 `arithmetic_gauge` + `dimension_crush` 组合场景下
- *   `buildRelicContext.diceCount` 仍然是原始 `selected.length`（未升档）
- *   导致 arithmetic_gauge 按原始档位取倍率的 bug（Verify δ-1 抓到）。
- */
-function deriveStraightLen(hand: HandResult): number {
-  if (hand.activeHands.includes('6顺')) return 6;
-  if (hand.activeHands.includes('5顺')) return 5;
-  if (hand.activeHands.includes('4顺')) return 4;
-  if (hand.activeHands.includes('顺子')) return 3;
-  return 0;
-}
-
-/**
  * 触发所有 on_play 遗物并聚合返回值。
  *
  * 收口原则（对齐铁律 C2 / C3）：
@@ -247,7 +230,7 @@ export function triggerOnPlayRelics(params: {
   const { relics, game, dice, selectedDice, hand, targetEnemy, pointSum } = params;
 
   // 升档后的真实顺子长度（非顺子为 0）
-  const straightLen = deriveStraightLen(hand);
+  const straightLen = deriveStraightLen(hand.activeHands);
 
   const ctx = buildRelicContext({
     game,

@@ -16,6 +16,7 @@ import type { PendingSideEffect, ExpectedOutcomeResult, CalculateExpectedOutcome
 import { HAND_TYPES } from '../data/handTypes';
 import { getDiceDef } from '../data/dice';
 import { buildRelicContext } from '../engine/buildRelicContext';
+import { deriveStraightLen } from '../utils/handEvaluator';
 import { FURY_CONFIG } from '../config/gameBalance';
 import { processDiceOnPlayEffects } from './diceOnPlay';
 
@@ -124,6 +125,15 @@ export function calculateExpectedOutcome(params: CalculateExpectedOutcomeParams)
       pointSum: X,
       hasPlayedThisTurn: (game.comboCount || 0) > 0,
     });
+    // PHASER-FIX-ARITHMETIC-GAUGE-DICECOUNT：
+    //   diceCount 应代表最终有效牌型长度，非 selected.length。
+    //   dimension_crush 把 3顺升成 4顺时，arithmetic_gauge 等按 diceCount 取倍率的遗物
+    //   应读升档后的有效长度（4），而非原始选骰数（3）。
+    const effectiveStraightLen = deriveStraightLen(activeHands);
+    if (effectiveStraightLen > selected.length) {
+      relicCtx.diceCount = effectiveStraightLen;
+    }
+
     const res = relic.effect(relicCtx);
     const details = [];
     if (res.damage) { extraDamage += res.damage; details.push(`伤害+${res.damage}`); }

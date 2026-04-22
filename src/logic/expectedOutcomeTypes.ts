@@ -55,4 +55,10 @@ export interface CalculateExpectedOutcomeParams {
   warriorRageMult: number;
   /** gameRef.current.mageOverchargeMult */
   mageOverchargeMult: number;
+  /**
+   * 顺子长度升档量（由 dimension_crush 遗物产生）。
+   * PHASER-FIX-ARITHMETIC-GAUGE-DICECOUNT：diceCount 应代表最终有效牌型长度。
+   * 调用方必须通过 buildSettlementInputs(game.relics).straightUpgrade 注入。
+   */
+  straightUpgrade: number;
 }
