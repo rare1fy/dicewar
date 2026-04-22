@@ -539,53 +539,50 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /**
-   * 全屏半透明遮罩 + 结局文字 + 3 按钮回流（再战 / 换职业 / 回首屏）。
-   * GAMEOVER-MVP：堵死胜败后胡同，给玩家三条明确出路。横幅本体实现下沉至 BattleGameOverBanner.ts。
+   * 全屏半透明遮罩 + 结局文字 + 3 按钮回流。
+   * - 默认：再战一局 / 换个职业 / 回到首屏（独立战斗 / 开发者菜单直入）
+   * - 从 Map 进入时（registry.pendingBattleNodeId 存在）：返回地图 / 换个职业 / 回到首屏
+   * 横幅本体实现下沉至 BattleGameOverBanner.ts。
    */
   private showOverBanner(title: string, titleColor: string): void {
     if (this.overBanner) return; // 防重入
-
-    // SFX: 胜利琶音 / 失败降调（按 title 字符串路由，避免新增一个独立参数）
     playSound(title === '胜利' ? 'victory' : 'death');
-
+    const fromMap = this.registry.get('pendingBattleNodeId') != null;
     this.overBanner = showBattleGameOverBanner(this, title, titleColor, {
-      onRestart: () => this.restartBattle(),
+      restartLabel: fromMap ? '返回地图' : '再战一局',
+      onRestart: () => fromMap ? this.backToMap() : this.restartBattle(),
       onBackToClassSelect: () => this.backToClassSelect(),
       onBackToStart: () => this.backToStart(),
     });
   }
 
-  /** 完全重置场景：Phaser scene restart 是最干净的做法（不依赖手动恢复 BattleState）。 */
-  private restartBattle(): void {
-    if (this.isLeavingScene) return; // R3 修复：防重入（快速连点 3 按钮）
+  /**
+   * 统一的离开场景路径：锁防重入 + 停 BGM + scene.start 目标。
+   * 传 null 表示 scene.restart（再战一局）。
+   * 所有按钮回调都收口到这里，DRY + 未来扩展按钮只加一行 wrapper。
+   */
+  private leaveToScene(targetKey: string | null): void {
+    if (this.isLeavingScene) return; // R3：防 3 按钮连点重入
     this.isLeavingScene = true;
-    // BGM 显式清理（SHUTDOWN 事件会再兜底一次，幂等安全；resetBattleResultState 也在 SHUTDOWN 触发）
-    this.stopBgm();
-    this.scene.restart();
+    this.stopBgm(); // BGM 显式清理（SHUTDOWN 也会兜底，幂等安全）
+    if (targetKey === null) this.scene.restart();
+    else this.scene.start(targetKey);
   }
 
-  /** 回职业选择：允许玩家换个职业重开；BGM 与战斗态由 SHUTDOWN 兜底清理。 */
-  private backToClassSelect(): void {
-    if (this.isLeavingScene) return;
-    this.isLeavingScene = true;
-    this.stopBgm();
-    this.scene.start('ClassSelectScene');
-  }
-
-  /** 回首屏：彻底退出本局；BGM 与战斗态由 SHUTDOWN 兜底清理。 */
-  private backToStart(): void {
-    if (this.isLeavingScene) return;
-    this.isLeavingScene = true;
-    this.stopBgm();
-    this.scene.start('StartScene');
-  }
+  private restartBattle(): void { this.leaveToScene(null); }
+  private backToClassSelect(): void { this.leaveToScene('ClassSelectScene'); }
+  private backToStart(): void { this.leaveToScene('StartScene'); }
+  /** 从 Map 进入的战斗胜败后回 Map；MapScene 在 create 里读 registry.lastBattleResult 更新节点状态 */
+  private backToMap(): void { this.leaveToScene('MapScene'); }
 
   /**
    * 战斗结算态一次性复位：挂在 SHUTDOWN 事件统一触发，
-   * 保护所有离开路径（restart / 换职业 / 回首屏 / 未来其他）。
+   * 保护所有离开路径（restart / 换职业 / 回首屏 / 回地图）。
    * Phaser 3 SceneManager 复用 Scene 实例，类字段必须显式复位。
    */
   private resetBattleResultState(): void {
+    // Map 回流探测点：SHUTDOWN 时把最终战果写入 game.registry，MapScene 读后据此决定节点是否 completed
+    this.registry.set('lastBattleResult', this.battleResult);
     this.battleResult = null;
     if (this.overBanner) {
       this.overBanner.destroy();

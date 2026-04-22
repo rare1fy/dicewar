@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { StartScene } from "@/scenes/StartScene";
 import { ClassSelectScene } from "@/scenes/ClassSelectScene";
+import { MapScene } from "@/scenes/MapScene";
 import { BootScene } from "@/scenes/BootScene";
 import { HandTestScene } from "@/scenes/HandTestScene";
 import { BattleScene } from "@/scenes/BattleScene";
@@ -18,8 +19,8 @@ const config: Phaser.Types.Core.GameConfig = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  // StartScene 放第一位作为首屏；ClassSelectScene 紧随其后；BootScene 保留为"开发者菜单"
-  scene: [StartScene, ClassSelectScene, BootScene, HandTestScene, BattleScene],
+  // StartScene 首屏 → ClassSelectScene 选职业 → MapScene 选节点 → BattleScene 战斗；BootScene 保留为"开发者菜单"
+  scene: [StartScene, ClassSelectScene, MapScene, BootScene, HandTestScene, BattleScene],
   render: {
     pixelArt: true,
     antialias: false,

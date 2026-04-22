@@ -5,7 +5,7 @@
  *   - 渲染三职业卡片（战士/法师/盗贼），展示名称/副标题/描述/规则数字/像素骰子图标
  *   - 选中态高亮（主题色描边 + 外发光）
  *   - 选中后展开技能详情面板（3 条技能）
- *   - 确认按钮触发 800ms 淡出转场，scene.start('BattleScene', { classId })
+ *   - 确认按钮触发 800ms 淡出转场，scene.start('MapScene', { classId })
  *   - 左上"← 返回"回 StartScene
  *
  * MVP 收窄（vs 原版 ClassSelectScreen.tsx 240 行 React + framer-motion）：
@@ -13,7 +13,7 @@
  *   - 做：卡片高亮 + 技能面板淡入 tween + 黑幕淡出 + select/gate_close 音效
  *
  * 数据源：data/classes.ts 的 CLASS_DEFS（已有）
- * 参数传递：通过 scene.start('BattleScene', { classId }) 注入到 BattleScene.init(data)
+ * 参数传递：通过 scene.start('MapScene', { classId }) 注入到 MapScene.init(data)，再透传给 BattleScene
  */
 
 import Phaser from 'phaser';
@@ -320,7 +320,11 @@ export class ClassSelectScene extends Phaser.Scene {
       ease: 'Sine.easeIn',
       onComplete: () => {
         const classId = this.selectedClass!;
-        this.scene.start('BattleScene', { classId });
+        // α-go 第 4 单：确认职业后进入地图；
+        // newRun:true 是双重语义 —— (1) 让 MapScene 重开地图（清 nodes/currentNodeId），
+        // (2) 清 registry 中可能残留的 Battle↔Map 回流协议键（pendingBattleNodeId / lastBattleResult），
+        //     避免上一局战斗中途退出时的"僵尸回流"数据污染新局。
+        this.scene.start('MapScene', { classId, newRun: true });
       },
     });
   }

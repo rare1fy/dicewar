@@ -23,6 +23,13 @@ export interface BannerCallbacks {
   onRestart: () => void;
   onBackToClassSelect: () => void;
   onBackToStart: () => void;
+  /**
+   * 首按钮文案（可选，默认 '再战一局'）。
+   * 例如从 MapScene 进入的战斗胜利后，BattleScene 把文案改成 '返回地图'，
+   * onRestart 的 callback 也会被 BattleScene 换成实际跳 MapScene 的逻辑。
+   * 接口本身只管文案，路由由 BattleScene 决定，Banner 保持解耦。
+   */
+  restartLabel?: string;
 }
 
 /**
@@ -54,7 +61,7 @@ export function showBattleGameOverBanner(
   const btnCx = width / 2;
   const btnBaseY = height / 2 + 10;
   const btnGap = 64;
-  container.add(createBannerButton(scene, '再战一局', btnCx, btnBaseY, '#2563eb', callbacks.onRestart));
+  container.add(createBannerButton(scene, callbacks.restartLabel ?? '再战一局', btnCx, btnBaseY, '#2563eb', callbacks.onRestart));
   container.add(createBannerButton(scene, '换个职业', btnCx, btnBaseY + btnGap, '#7c3aed', callbacks.onBackToClassSelect));
   container.add(createBannerButton(scene, '回到首屏', btnCx, btnBaseY + btnGap * 2, '#475569', callbacks.onBackToStart));
 
