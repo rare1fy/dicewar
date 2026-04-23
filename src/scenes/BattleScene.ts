@@ -502,8 +502,9 @@ export class BattleScene extends Phaser.Scene {
 
   private restartBattle(): void { this.leaveToScene(null); }
   private backToClassSelect(): void {
-    this.writeGameOverStats('defeat', false); // 换职业 = 放弃本局
-    this.leaveToScene('ClassSelectScene');
+    // α-go GAMEOVER：换职业 = 放弃本局 = defeat 结局 → 统一进 GameOverScene
+    this.writeGameOverStats('defeat', false);
+    this.leaveToScene('GameOverScene');
   }
   private backToStart(): void {
     // α-go GAMEOVER：战斗失败（非 fromMap 路径） → 写统计 → 跳 GameOverScene

@@ -83,6 +83,8 @@ export class GameOverScene extends Phaser.Scene {
 
     // SHUTDOWN 清理
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      // 清理结局统计快照（生命周期闭环，防止下一局读到旧数据）
+      this.registry.remove('gameOverStats');
       // 清理本局所有 run-scoped 数据，保证新局干净
       resetRunState(this);
     });
