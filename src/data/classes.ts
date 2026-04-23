@@ -153,7 +153,7 @@ const WARRIOR_DICE: DiceDef[] = [
     description: '回复HP，数值等于本骰子的点数，同时清除1层负面状态', onPlay: { healFromValue: true, purifyOne: true } },
 
   // === Rare (8) ===
-  { id: 'w_titanfist', name: '泰坦之拳', element: 'normal', faces: [6,6,6,6,6,6], rarity: 'rare',
+  { id: 'w_titanfist', name: '穹环之拳', element: 'normal', faces: [6,6,6,6,6,6], rarity: 'rare',
     description: '固定6点。出牌时自伤最大HP的10%，摧毁目标护甲并追加15点固定伤害', onPlay: { selfDamagePercent: 0.10, armorBreak: true, bonusDamage: 15 } },
   { id: 'w_unyielding', name: '不屈意志', element: 'normal', faces: [1,2,3,4,5,6], rarity: 'rare',
     description: '自身血量低于30%时，本骰子点数强制变为6', onPlay: { lowHpOverrideValue: 6, lowHpThreshold: 0.3 } },

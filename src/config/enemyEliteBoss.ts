@@ -1,5 +1,13 @@
-/**
- * enemyEliteBoss.ts - 精英敌人 & Boss敌人 & 可升级牌型池
+﻿/**
+ * enemyEliteBoss.ts - 精英 & Boss 敌人配置
+ *
+ * 章1: 边线猎场 — 王国军
+ * 章2: 冷枝封林 — 月林守夜会
+ * 章3: 火脉工坑 — 铁须工坊 + 獠牙部落
+ * 章4: 冰背旧道 — 霜冠旧廷
+ * 章5: 冠顶天环 — 天穹看守团 + 星界议会
+ *
+ * 注意：数组分组仅为代码组织，敌人实际章节归属以 chapter 字段为准
  */
 
 import type { EnemyConfig } from './enemyTypes';
@@ -8,9 +16,9 @@ import type { EnemyConfig } from './enemyTypes';
 // 精英敌人 — 每章2个
 // ============================================================
 export const ELITE_ENEMIES: EnemyConfig[] = [
-  // 章1
+  // 章1: 边线猎场
   {
-    id: 'elite_necromancer', name: '亡灵巫师', emoji: '', chapter: 1,
+    id: 'elite_necromancer', name: '坟账抄骨师', emoji: '', chapter: 4,
     baseHp: 85, baseDmg: 8, category: 'elite', combatType: 'caster',
     drops: { gold: 50, relic: true, rerollReward: 2 },
     phases: [
@@ -33,7 +41,7 @@ export const ELITE_ENEMIES: EnemyConfig[] = [
     },
   },
   {
-    id: 'elite_alpha_wolf', name: '狼人首领', emoji: '', chapter: 1,
+    id: 'elite_alpha_wolf', name: '猎场白牙头', emoji: '', chapter: 2,
     baseHp: 100, baseDmg: 11, category: 'elite', combatType: 'warrior',
     drops: { gold: 50, relic: true, rerollReward: 2 },
     phases: [{ actions: [
@@ -52,7 +60,7 @@ export const ELITE_ENEMIES: EnemyConfig[] = [
   },
   // 章2
   {
-    id: 'elite_frost_wyrm', name: '霜龙幼崽', emoji: '', chapter: 2,
+    id: 'elite_frost_wyrm', name: '冻脊幼龙', emoji: '', chapter: 4,
     baseHp: 95, baseDmg: 10, category: 'elite', combatType: 'caster',
     drops: { gold: 50, relic: true, rerollReward: 2 },
     phases: [
@@ -76,7 +84,7 @@ export const ELITE_ENEMIES: EnemyConfig[] = [
     },
   },
   {
-    id: 'elite_ice_lord', name: '冰霜巨人王', emoji: '', chapter: 2,
+    id: 'elite_ice_lord', name: '封岭山王', emoji: '', chapter: 4,
     baseHp: 120, baseDmg: 7, category: 'elite', combatType: 'guardian',
     drops: { gold: 50, relic: true, rerollReward: 2 },
     phases: [{ actions: [
@@ -95,7 +103,7 @@ export const ELITE_ENEMIES: EnemyConfig[] = [
   },
   // 章3
   {
-    id: 'elite_infernal', name: '地狱火', emoji: '', chapter: 3,
+    id: 'elite_infernal', name: '炉坠机神', emoji: '', chapter: 3,
     baseHp: 100, baseDmg: 12, category: 'elite', combatType: 'warrior',
     drops: { gold: 50, relic: true, rerollReward: 2 },
     phases: [{ actions: [
@@ -113,7 +121,7 @@ export const ELITE_ENEMIES: EnemyConfig[] = [
     },
   },
   {
-    id: 'elite_dark_iron', name: '黑铁议员', emoji: '', chapter: 3,
+    id: 'elite_dark_iron', name: '炉城拍桌官', emoji: '', chapter: 3,
     baseHp: 90, baseDmg: 9, category: 'elite', combatType: 'caster',
     drops: { gold: 50, relic: true, rerollReward: 2 },
     phases: [
@@ -137,26 +145,26 @@ export const ELITE_ENEMIES: EnemyConfig[] = [
   },
   // 章4
   {
-    id: 'elite_doomguard', name: '末日守卫', emoji: '', chapter: 4,
+    id: 'elite_doomguard', name: '城狱断钟卫', emoji: '', chapter: 1,
     baseHp: 110, baseDmg: 11, category: 'elite', combatType: 'warrior',
     drops: { gold: 50, relic: true, rerollReward: 2 },
     phases: [{ actions: [
       { type: '攻击', baseValue: 11 },
-      { type: '攻击', baseValue: 16, description: '末日审判' },
+      { type: '攻击', baseValue: 16, description: '断钟裁决' },
       { type: '技能', baseValue: 2, description: '易伤', scalable: false },
       { type: '防御', baseValue: 14 },
       { type: '技能', baseValue: 1, description: '诅咒注入', scalable: false, curseDice: 'cursed', curseDiceCount: 1 },
     ]}],
     quotes: {
-      enter: ['末日……已经降临。', '你的灵魂……归军团所有！'],
-      death: ['军团……不灭……', '这不过是……开始……'],
-      attack: ['末日审判！', '灵魂撕裂！', '深渊之力！'],
-      hurt: ['邪能护甲……动摇了？', '渺小的伤害……'],
-      lowHp: ['用我的生命……召唤更强大的恶魔！'],
+      enter: ['末钟……已经敲响。', '你的灵魂……归狱印军团所有！'],
+      death: ['狱印军团……不灭……', '这不过是……开始……'],
+      attack: ['断钟裁决！', '灵魂撕裂！', '深渊之力！'],
+      hurt: ['狱焰护甲……动摇了？', '渺小的伤害……'],
+      lowHp: ['用我的生命……召唤更强大的狱焰魔！'],
     },
   },
   {
-    id: 'elite_shadow_priest', name: '暗影大主教', emoji: '', chapter: 4,
+    id: 'elite_shadow_priest', name: '黑谕总司铎', emoji: '', chapter: 2,
     baseHp: 80, baseDmg: 8, category: 'elite', combatType: 'priest',
     drops: { gold: 50, relic: true, rerollReward: 2 },
     phases: [
@@ -181,25 +189,25 @@ export const ELITE_ENEMIES: EnemyConfig[] = [
   },
   // 章5
   {
-    id: 'elite_titan_construct', name: '泰坦守护者', emoji: '', chapter: 5,
+    id: 'elite_titan_construct', name: '冠环镇机像', emoji: '', chapter: 5,
     baseHp: 130, baseDmg: 10, category: 'elite', combatType: 'guardian',
     drops: { gold: 50, relic: true, rerollReward: 2 },
     phases: [{ actions: [
       { type: '防御', baseValue: 22 },
       { type: '攻击', baseValue: 10 },
-      { type: '攻击', baseValue: 18, description: '泰坦之锤' },
+      { type: '攻击', baseValue: 18, description: '穹环之锤' },
       { type: '技能', baseValue: 2, description: '虚弱', scalable: false },
     ]}],
     quotes: {
-      enter: ['入侵者检测完毕。启动消灭程序。', '泰坦的造物……不可战胜。'],
+      enter: ['入侵者检测完毕。启动消灭程序。', '穹环的造物……不可战胜。'],
       death: ['系统……崩溃……', '协议……执行……失败……'],
-      attack: ['泰坦之锤！', '消灭目标！', '粉碎入侵者！'],
+      attack: ['穹环之锤！', '消灭目标！', '粉碎入侵者！'],
       hurt: ['护盾……承受冲击……', '损伤率……可接受……'],
       lowHp: ['核心过载……启动自毁倒计时……'],
     },
   },
   {
-    id: 'elite_void_walker', name: '虚空行者', emoji: '', chapter: 5,
+    id: 'elite_void_walker', name: '裂幕搬运使', emoji: '', chapter: 5,
     baseHp: 90, baseDmg: 13, category: 'elite', combatType: 'caster',
     drops: { gold: 50, relic: true, rerollReward: 2 },
     phases: [
@@ -230,7 +238,7 @@ export const ELITE_ENEMIES: EnemyConfig[] = [
 export const BOSS_ENEMIES: EnemyConfig[] = [
   // 章1 中Boss
   {
-    id: 'boss_lich_forest', name: '枯骨巫妖', emoji: '', chapter: 1,
+    id: 'boss_lich_forest', name: '林债收骨侯', emoji: '', chapter: 4,
     baseHp: 150, baseDmg: 10, category: 'boss', combatType: 'caster',
     drops: { gold: 60, relic: true },
     phases: [
@@ -259,7 +267,7 @@ export const BOSS_ENEMIES: EnemyConfig[] = [
   },
   // 章1 终Boss
   {
-    id: 'boss_ancient_treant', name: '远古树王', emoji: '', chapter: 1,
+    id: 'boss_ancient_treant', name: '封林根主', emoji: '', chapter: 2,
     baseHp: 300, baseDmg: 15, category: 'boss', combatType: 'guardian',
     drops: { gold: 0, relic: false },
     phases: [
@@ -286,7 +294,7 @@ export const BOSS_ENEMIES: EnemyConfig[] = [
   },
   // 章2 中Boss
   {
-    id: 'boss_frost_queen', name: '霜寒女王', emoji: '', chapter: 2,
+    id: 'boss_frost_queen', name: '冻途雪后', emoji: '', chapter: 4,
     baseHp: 160, baseDmg: 10, category: 'boss', combatType: 'caster',
     drops: { gold: 60, relic: true },
     phases: [
@@ -315,12 +323,12 @@ export const BOSS_ENEMIES: EnemyConfig[] = [
   },
   // 章2 终Boss
   {
-    id: 'boss_frost_lich', name: '霜之巫妖王', emoji: '', chapter: 2,
+    id: 'boss_frost_lich', name: '冰座旧君', emoji: '', chapter: 4,
     baseHp: 320, baseDmg: 15, category: 'boss', combatType: 'warrior',
     drops: { gold: 0, relic: false },
     phases: [
       { hpThreshold: 0.5, actions: [
-        { type: '攻击', baseValue: 28, description: '霜之哀伤' },
+        { type: '攻击', baseValue: 28, description: '霜骨旧刃' },
         { type: '攻击', baseValue: 20 },
         { type: '技能', baseValue: 3, description: '剧毒', scalable: false },
         { type: '防御', baseValue: 28 },
@@ -333,16 +341,16 @@ export const BOSS_ENEMIES: EnemyConfig[] = [
       ]},
     ],
     quotes: {
-      enter: ['跪下……在巫妖王面前。', '这把剑……渴望你的灵魂。'],
-      death: ['不……霜之哀伤……不会……', '永恒的寒冬……终结了？'],
-      attack: ['霜之哀伤！', '臣服于寒冰！', '灵魂收割！'],
+      enter: ['跪下……在冰座旧君面前。', '这把剑……渴望你的灵魂。'],
+      death: ['不……霜骨旧刃……不会……', '永恒的寒冬……终结了？'],
+      attack: ['霜骨旧刃！', '臣服于寒冰！', '灵魂收割！'],
       hurt: ['不过是……暖风拂面。', '你的抵抗……毫无意义。'],
       lowHp: ['所有人……都将臣服于寒冰王座——！'],
     },
   },
   // 章3 中Boss
   {
-    id: 'boss_ragnaros', name: '炎魔之王', emoji: '', chapter: 3,
+    id: 'boss_ragnaros', name: '火喉炉君', emoji: '', chapter: 3,
     baseHp: 200, baseDmg: 12, category: 'boss', combatType: 'warrior',
     drops: { gold: 60, relic: true },
     phases: [
@@ -369,12 +377,12 @@ export const BOSS_ENEMIES: EnemyConfig[] = [
   },
   // 章3 终Boss
   {
-    id: 'boss_deathwing', name: '熔火死翼', emoji: '', chapter: 3,
+    id: 'boss_deathwing', name: '崩炉坠翼', emoji: '', chapter: 3,
     baseHp: 380, baseDmg: 16, category: 'boss', combatType: 'caster',
     drops: { gold: 0, relic: false },
     phases: [
       { hpThreshold: 0.5, actions: [
-        { type: '攻击', baseValue: 30, description: '大灾变' },
+        { type: '攻击', baseValue: 30, description: '崩炉坠天' },
         { type: '攻击', baseValue: 22 },
         { type: '技能', baseValue: 4, description: '灼烧', scalable: false },
         { type: '防御', baseValue: 30 },
@@ -387,23 +395,23 @@ export const BOSS_ENEMIES: EnemyConfig[] = [
       ]},
     ],
     quotes: {
-      enter: ['大灾变……来临了！', '凡人……在我面前……不堪一击。'],
-      death: ['不……我是……大地的毁灭者……怎么会……', '（咆哮着坠入岩浆）'],
-      attack: ['大灾变！', '熔岩吐息！', '世界……在燃烧！'],
+      enter: ['崩炉坠天……来了！', '凡人……在我面前……不堪一击。'],
+      death: ['不……我是……炉城的终结者……怎么会……', '（咆哮着坠入岩浆）'],
+      attack: ['崩炉坠天！', '熔岩吐息！', '世界……在燃烧！'],
       hurt: ['你伤到了……我的钢铁之躯？', '可笑……'],
       lowHp: ['即使我倒下……世界……也已面目全非——！'],
     },
   },
   // 章4 中Boss
   {
-    id: 'boss_archimonde', name: '深渊领主', emoji: '', chapter: 4,
+    id: 'boss_archimonde', name: '黑谕裂掌公', emoji: '', chapter: 3,
     baseHp: 200, baseDmg: 11, category: 'boss', combatType: 'caster',
     drops: { gold: 60, relic: true },
     phases: [
       { hpThreshold: 0.4, actions: [
         { type: '攻击', baseValue: 18, description: '暗影之手' },
         { type: '技能', baseValue: 2, description: '灼烧', scalable: false },
-        { type: '攻击', baseValue: 14, description: '邪能风暴' },
+        { type: '攻击', baseValue: 14, description: '狱焰风暴' },
         { type: '技能', baseValue: 1, description: '诅咒注入', scalable: false, curseDice: 'cursed', curseDiceCount: 1 },
         { type: '防御', baseValue: 16 },
       ]},
@@ -416,16 +424,16 @@ export const BOSS_ENEMIES: EnemyConfig[] = [
       ]},
     ],
     quotes: {
-      enter: ['燃烧军团……势不可挡！', '你的抵抗……不过是临死前的挣扎。'],
-      death: ['不……军团……不会……', '我会……在扭曲虚空中……重生！'],
-      attack: ['暗影之手！', '邪能风暴！', '毁灭一切！'],
+      enter: ['狱印军团……势不可挡！', '你的抵抗……不过是临死前的挣扎。'],
+      death: ['不……狱印军团……不会……', '我会……在扭曲虚空中……重生！'],
+      attack: ['暗影之手！', '狱焰风暴！', '毁灭一切！'],
       hurt: ['你……竟敢？', '渺小的虫子……'],
       lowHp: ['燃烧吧——用你的世界……作为我的燃料！'],
     },
   },
   // 章4 终Boss
   {
-    id: 'boss_kiljaeden', name: '暗影之王', emoji: '', chapter: 4,
+    id: 'boss_kiljaeden', name: '终夜执印者', emoji: '', chapter: 2,
     baseHp: 380, baseDmg: 16, category: 'boss', combatType: 'caster',
     drops: { gold: 0, relic: false },
     phases: [
@@ -439,25 +447,25 @@ export const BOSS_ENEMIES: EnemyConfig[] = [
         { type: '技能', baseValue: 4, description: '灼烧', scalable: false },
         { type: '攻击', baseValue: 14 },
         { type: '技能', baseValue: 2, description: '虚弱', scalable: false },
-        { type: '攻击', baseValue: 20, description: '邪能陨石' },
+        { type: '攻击', baseValue: 20, description: '狱焰陨石' },
       ]},
     ],
     quotes: {
       enter: ['欺骗者……来了。', '你看到的一切……都是我的安排。'],
       death: ['虚空……会记住……这一天……', '不可能……欺骗者……怎会被欺骗……'],
-      attack: ['黑暗终焉！', '邪能陨石！', '所有生命——终结吧！'],
+      attack: ['黑暗终焉！', '狱焰陨石！', '所有生命——终结吧！'],
       hurt: ['有趣……你确实……有些能耐。', '欺骗者……不惧伤痛。'],
       lowHp: ['用虚空的全部力量——毁灭这个世界！'],
     },
   },
   // 章5 中Boss
   {
-    id: 'boss_titan_watcher', name: '泰坦看守者', emoji: '', chapter: 5,
+    id: 'boss_titan_watcher', name: '冠环大看守', emoji: '', chapter: 5,
     baseHp: 200, baseDmg: 12, category: 'boss', combatType: 'guardian',
     drops: { gold: 60, relic: true },
     phases: [
       { hpThreshold: 0.4, actions: [
-        { type: '攻击', baseValue: 18, description: '泰坦审判' },
+        { type: '攻击', baseValue: 18, description: '穹环审判' },
         { type: '防御', baseValue: 22 },
         { type: '攻击', baseValue: 16, description: '秩序之光' },
         { type: '技能', baseValue: 2, description: '易伤', scalable: false },
@@ -470,16 +478,16 @@ export const BOSS_ENEMIES: EnemyConfig[] = [
       ]},
     ],
     quotes: {
-      enter: ['泰坦的秩序……不容亵渎。', '你的存在……是一个错误。需要修正。'],
-      death: ['秩序……被打破了……', '报告……泰坦……入侵者……无法阻止……'],
-      attack: ['泰坦审判！', '秩序之光！', '修正错误！'],
+      enter: ['穹环的秩序……不容亵渎。', '你的存在……是一个错误。需要修正。'],
+      death: ['秩序……被打破了……', '报告……穹环……入侵者……无法阻止……'],
+      attack: ['穹环审判！', '秩序之光！', '修正错误！'],
       hurt: ['损伤……在可控范围内……', '你的力量……超出预期……'],
       lowHp: ['启动……最终审判协议——！'],
     },
   },
   // 章5 终Boss
   {
-    id: 'boss_eternal_lord', name: '永恒主宰', emoji: '', chapter: 5,
+    id: 'boss_eternal_lord', name: '曙印塔主', emoji: '', chapter: 5,
     baseHp: 480, baseDmg: 18, category: 'boss', combatType: 'caster',
     drops: { gold: 0, relic: false },
     phases: [

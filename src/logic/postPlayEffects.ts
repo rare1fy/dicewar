@@ -426,7 +426,7 @@ export function executePostPlayEffects(ctx: PostPlayContext): void {
     logMsg += ` (触发: ${augDetails})`;
   }
 
-  // 圣光净化：出牌后才执行副作用（清除负面状态或移除诅咒骰子）
+  // 冠灯净化：出牌后才执行副作用（清除负面状态或移除诅咒骰子）
   if (outcome.holyPurify) {
     const purifyCount = typeof outcome.holyPurify === 'number' ? outcome.holyPurify : 1;
     const negativeStatuses = game.statuses.filter(s => ['poison', 'burn', 'vulnerable', 'weak'].includes(s.type));

@@ -1,21 +1,24 @@
-/**
+﻿/**
  * enemyNormal.ts - 5章普通敌人配置
  *
- * 章1: 幽暗森林 — 亡灵/蜘蛛/狼人/树精
- * 章2: 冰封山脉 — 冰巨人/雪狼/冰元素/霜巫
- * 章3: 熔岩深渊 — 火元素/熔岩犬/黑铁矮人/地狱火
- * 章4: 暗影要塞 — 暗影刺客/恶魔卫兵/邪能术士/堕落天使
- * 章5: 永恒之巅 — 光铸卫士/时光龙/虚空行者/泰坦造物
+ * 章1: 边线猎场 — 王国军
+ * 章2: 冷枝封林 — 月林守夜会
+ * 章3: 火脉工坑 — 铁须工坊 + 獠牙部落
+ * 章4: 冰背旧道 — 霜冠旧廷
+ * 章5: 冠顶天环 — 天穹看守团 + 星界议会
+ *
+ * 注意：数组分组仅为代码组织，敌人实际章节归属以 chapter 字段为准
  */
 
 import type { EnemyConfig } from './enemyTypes';
 
+
 // ============================================================
-// 章1: 幽暗森林 — 亡灵/野兽/腐化生物
+// 章1: 边线猎场 — 王国军
 // ============================================================
 export const ch1_normals: EnemyConfig[] = [
   {
-    id: 'forest_ghoul', name: '食尸鬼', emoji: '', chapter: 1,
+    id: 'forest_ghoul', name: '林坟扒手', emoji: '', chapter: 4,
     baseHp: 28, baseDmg: 7, category: 'normal', combatType: 'warrior',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -32,7 +35,7 @@ export const ch1_normals: EnemyConfig[] = [
     },
   },
   {
-    id: 'forest_spider', name: '剧毒蛛母', emoji: '', chapter: 1,
+    id: 'forest_spider', name: '林税织母', emoji: '', chapter: 2,
     baseHp: 18, baseDmg: 3, category: 'normal', combatType: 'ranger',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -49,7 +52,7 @@ export const ch1_normals: EnemyConfig[] = [
     },
   },
   {
-    id: 'forest_treant', name: '腐化树人', emoji: '', chapter: 1,
+    id: 'forest_treant', name: '封林老根', emoji: '', chapter: 2,
     baseHp: 42, baseDmg: 4, category: 'normal', combatType: 'guardian',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -67,7 +70,7 @@ export const ch1_normals: EnemyConfig[] = [
     },
   },
   {
-    id: 'forest_banshee', name: '哀嚎女妖', emoji: '', chapter: 1,
+    id: 'forest_banshee', name: '哭腔报丧官', emoji: '', chapter: 2,
     baseHp: 16, baseDmg: 3, category: 'normal', combatType: 'caster',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -84,7 +87,7 @@ export const ch1_normals: EnemyConfig[] = [
     },
   },
   {
-    id: 'forest_wolf_priest', name: '月光狼灵', emoji: '', chapter: 1,
+    id: 'forest_wolf_priest', name: '白牙巡祷犬', emoji: '', chapter: 2,
     baseHp: 20, baseDmg: 2, category: 'normal', combatType: 'priest',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -103,11 +106,11 @@ export const ch1_normals: EnemyConfig[] = [
 ];
 
 // ============================================================
-// 章2: 冰封山脉 — 冰霜生物
+// 章2: 冷枝封林 — 月林守夜会
 // ============================================================
 export const ch2_normals: EnemyConfig[] = [
   {
-    id: 'ice_yeti', name: '雪原雪人', emoji: '', chapter: 2,
+    id: 'ice_yeti', name: '冰背搬山怪', emoji: '', chapter: 4,
     baseHp: 36, baseDmg: 9, category: 'normal', combatType: 'warrior',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -123,7 +126,7 @@ export const ch2_normals: EnemyConfig[] = [
     },
   },
   {
-    id: 'ice_mage', name: '霜寒女巫', emoji: '', chapter: 2,
+    id: 'ice_mage', name: '霜簿咒妇', emoji: '', chapter: 4,
     baseHp: 18, baseDmg: 4, category: 'normal', combatType: 'caster',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -140,7 +143,7 @@ export const ch2_normals: EnemyConfig[] = [
     },
   },
   {
-    id: 'ice_wolf', name: '霜鬃狼', emoji: '', chapter: 2,
+    id: 'ice_wolf', name: '雪岗巡牙', emoji: '', chapter: 2,
     baseHp: 22, baseDmg: 5, category: 'normal', combatType: 'ranger',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -157,7 +160,7 @@ export const ch2_normals: EnemyConfig[] = [
     },
   },
   {
-    id: 'ice_golem', name: '寒冰石像', emoji: '', chapter: 2,
+    id: 'ice_golem', name: '冻门守像', emoji: '', chapter: 3,
     baseHp: 44, baseDmg: 4, category: 'normal', combatType: 'guardian',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -176,11 +179,11 @@ export const ch2_normals: EnemyConfig[] = [
 ];
 
 // ============================================================
-// 章3: 熔岩深渊 — 火焰/恶魔生物
+// 章3: 火脉工坑 — 铁须工坊 + 獠牙部落
 // ============================================================
 export const ch3_normals: EnemyConfig[] = [
   {
-    id: 'lava_hound', name: '地狱火犬', emoji: '', chapter: 3,
+    id: 'lava_hound', name: '熔坑猎火犬', emoji: '', chapter: 3,
     baseHp: 30, baseDmg: 8, category: 'normal', combatType: 'warrior',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -197,7 +200,7 @@ export const ch3_normals: EnemyConfig[] = [
     },
   },
   {
-    id: 'lava_imp', name: '小恶魔', emoji: '', chapter: 3,
+    id: 'lava_imp', name: '火渣闹鬼童', emoji: '', chapter: 3,
     baseHp: 16, baseDmg: 4, category: 'normal', combatType: 'caster',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -215,7 +218,7 @@ export const ch3_normals: EnemyConfig[] = [
     },
   },
   {
-    id: 'lava_guardian', name: '黑铁卫士', emoji: '', chapter: 3,
+    id: 'lava_guardian', name: '铆甲炉卫', emoji: '', chapter: 3,
     baseHp: 48, baseDmg: 5, category: 'normal', combatType: 'guardian',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -233,7 +236,7 @@ export const ch3_normals: EnemyConfig[] = [
     },
   },
   {
-    id: 'lava_shaman', name: '火焰萨满', emoji: '', chapter: 3,
+    id: 'lava_shaman', name: '灰喉火祝', emoji: '', chapter: 3,
     baseHp: 22, baseDmg: 3, category: 'normal', combatType: 'priest',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -252,11 +255,11 @@ export const ch3_normals: EnemyConfig[] = [
 ];
 
 // ============================================================
-// 章4: 暗影要塞 — 恶魔/堕落生物
+// 章4: 冰背旧道 — 霜冠旧廷
 // ============================================================
 export const ch4_normals: EnemyConfig[] = [
   {
-    id: 'shadow_assassin', name: '暗影刺客', emoji: '', chapter: 4,
+    id: 'shadow_assassin', name: '夜巷割影手', emoji: '', chapter: 2,
     baseHp: 24, baseDmg: 12, category: 'normal', combatType: 'ranger',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -273,24 +276,24 @@ export const ch4_normals: EnemyConfig[] = [
     },
   },
   {
-    id: 'shadow_felguard', name: '邪能卫兵', emoji: '', chapter: 4,
+    id: 'shadow_felguard', name: '狱焰重甲卒', emoji: '', chapter: 3,
     baseHp: 46, baseDmg: 6, category: 'normal', combatType: 'guardian',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
       { type: '攻击', baseValue: 7 },
       { type: '防御', baseValue: 14 },
-      { type: '攻击', baseValue: 9, description: '邪能重斩' },
+      { type: '攻击', baseValue: 9, description: '狱焰重斩' },
     ]}],
     quotes: {
-      enter: ['受主人之命……消灭一切入侵者！', '邪能……流淌在我的血脉中！'],
-      death: ['主人……恕我……', '邪能……回归虚空……'],
-      attack: ['邪能斩！', '毁灭！', '碾碎你！'],
-      hurt: ['邪能护甲……', '不过如此……'],
+      enter: ['受主人之命……消灭一切入侵者！', '狱焰……流淌在我的血脉中！'],
+      death: ['主人……恕我……', '狱焰……回归虚空……'],
+      attack: ['狱焰斩！', '毁灭！', '碾碎你！'],
+      hurt: ['狱焰护甲……', '不过如此……'],
       lowHp: ['主人的力量……赐予我……最后一击！'],
     },
   },
   {
-    id: 'shadow_warlock', name: '邪能术士', emoji: '', chapter: 4,
+    id: 'shadow_warlock', name: '夜印咒吏', emoji: '', chapter: 3,
     baseHp: 20, baseDmg: 5, category: 'normal', combatType: 'caster',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -300,15 +303,15 @@ export const ch4_normals: EnemyConfig[] = [
       { type: '攻击', baseValue: 7, description: '暗影箭' },
     ]}],
     quotes: {
-      enter: ['邪能……是最强大的力量！', '痛苦……才刚刚开始……'],
-      death: ['不……我的灵魂……', '邪能……反噬了……'],
+      enter: ['狱焰……是最强大的力量！', '痛苦……才刚刚开始……'],
+      death: ['不……我的灵魂……', '狱焰……反噬了……'],
       attack: ['暗影箭！', '燃烧吧！', '腐蚀！'],
       hurt: ['灵魂石……碎了……', '不可能……我的结界……'],
       lowHp: ['生命分流！用你的生命……延续我的！'],
     },
   },
   {
-    id: 'shadow_knight', name: '堕落死亡骑士', emoji: '', chapter: 4,
+    id: 'shadow_knight', name: '旧誓断甲骑', emoji: '', chapter: 1,
     baseHp: 34, baseDmg: 10, category: 'normal', combatType: 'warrior',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -327,29 +330,29 @@ export const ch4_normals: EnemyConfig[] = [
 ];
 
 // ============================================================
-// 章5: 永恒之巅 — 光铸/泰坦/时光造物
+// 章5: 冠顶天环 — 天穹看守团 + 星界议会
 // ============================================================
 export const ch5_normals: EnemyConfig[] = [
   {
-    id: 'eternal_sentinel', name: '光铸哨兵', emoji: '', chapter: 5,
+    id: 'eternal_sentinel', name: '冠灯岗哨', emoji: '', chapter: 1,
     baseHp: 40, baseDmg: 8, category: 'normal', combatType: 'guardian',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
       { type: '防御', baseValue: 14 },
       { type: '攻击', baseValue: 8 },
       { type: '防御', baseValue: 10 },
-      { type: '攻击', baseValue: 10, description: '圣光裁决' },
+      { type: '攻击', baseValue: 10, description: '冠灯裁决' },
     ]}],
     quotes: {
-      enter: ['此地……不可侵犯。', '以泰坦之名——退下！'],
+      enter: ['此地……不可侵犯。', '以穹环之名——退下！'],
       death: ['任务……失败……', '光……指引我……回家……'],
-      attack: ['裁决！', '净化！', '圣光之锤！'],
-      hurt: ['圣光护盾……动摇了……', '不过是……考验……'],
-      lowHp: ['即使倒下……光明……永不熄灭……'],
+      attack: ['裁决！', '净化！', '冠灯之锤！'],
+      hurt: ['冠灯护盾……动摇了……', '不过是……考验……'],
+      lowHp: ['即使倒下……冠灯……永不熄灭……'],
     },
   },
   {
-    id: 'eternal_chrono', name: '时光龙人', emoji: '', chapter: 5,
+    id: 'eternal_chrono', name: '刻漏巡官', emoji: '', chapter: 5,
     baseHp: 26, baseDmg: 7, category: 'normal', combatType: 'caster',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -366,7 +369,7 @@ export const ch5_normals: EnemyConfig[] = [
     },
   },
   {
-    id: 'eternal_archer', name: '星界游侠', emoji: '', chapter: 5,
+    id: 'eternal_archer', name: '天环巡矢手', emoji: '', chapter: 5,
     baseHp: 22, baseDmg: 10, category: 'normal', combatType: 'ranger',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
@@ -383,20 +386,20 @@ export const ch5_normals: EnemyConfig[] = [
     },
   },
   {
-    id: 'eternal_priest', name: '泰坦祭司', emoji: '', chapter: 5,
+    id: 'eternal_priest', name: '冠律祷师', emoji: '', chapter: 5,
     baseHp: 24, baseDmg: 3, category: 'normal', combatType: 'priest',
     drops: { gold: 20, relic: false },
     phases: [{ actions: [
       { type: '技能', baseValue: 2, description: '力量', scalable: false },
       { type: '技能', baseValue: 1, description: '易伤', scalable: false },
-      { type: '攻击', baseValue: 6, description: '圣光惩击' },
+      { type: '攻击', baseValue: 6, description: '冠律惩击' },
     ]}],
     quotes: {
-      enter: ['泰坦的意志……不容亵渎。', '圣光……会审判一切。'],
-      death: ['泰坦……我……回来了……', '（光芒消散）'],
-      attack: ['惩击！', '圣光！', '泰坦之怒！'],
+      enter: ['穹环的意志……不容亵渎。', '冠律……会审判一切。'],
+      death: ['穹环……我……回来了……', '（光芒消散）'],
+      attack: ['惩击！', '冠律！', '穹环之怒！'],
       hurt: ['信仰……不会动摇……', '只是……皮肉之伤……'],
-      lowHp: ['圣光……赐予我……最后的力量……'],
+      lowHp: ['冠律……赐予我……最后的力量……'],
     },
   },
 ];
