@@ -384,7 +384,9 @@ export class MapScene extends Phaser.Scene {
   /**
    * 消费 registry 里战斗结果（create 和 wake 双入口复用）。
    * 胜利 → 标记对应节点 completed + 更新 currentNodeId；
-   * 失败或缺失 → 不动节点（让玩家重新选或换职业）。
+   *   - 最终 Boss 通关 → 写统计 → 跳 GameOverScene（通关画面）
+   * 失败 → 写统计 → 跳 GameOverScene（败北画面）
+   * 其他 → 不动节点（让玩家重新选或换职业）。
    */
   private consumeBattleResultIfAny(): void {
     const result = this.registry.get('lastBattleResult') as 'victory' | 'defeat' | null | undefined;
@@ -394,14 +396,58 @@ export class MapScene extends Phaser.Scene {
       if (node) {
         node.completed = true;
         this.currentNodeId = nodeId;
+
+        // α-go GAMEOVER：最终 Boss 通关 → 写统计 → 跳 GameOverScene
+        if (node.type === 'boss' && this.isFinalBoss(node)) {
+          this.writeGameOverStats('victory');
+          this.cleanupBattleRegistry();
+          this.isEnteringBattle = false;
+          this.scene.start('GameOverScene', { classId: this.classId, outcome: 'victory' });
+          return;
+        }
       }
     }
-    this.registry.remove('lastBattleResult');
-    this.registry.remove('pendingBattleNodeId');
+    if (result === 'defeat') {
+      // α-go GAMEOVER：战斗失败 → 写统计 → 跳 GameOverScene
+      this.writeGameOverStats('defeat');
+      this.cleanupBattleRegistry();
+      this.isEnteringBattle = false;
+      this.scene.start('GameOverScene', { classId: this.classId, outcome: 'defeat' });
+      return;
+    }
+    this.cleanupBattleRegistry();
     this.isEnteringBattle = false;
     this.refreshAllNodes();
     // 战斗胜利后 currentNodeId 已推进，相机平滑滚到新位置让玩家看清下一层可走节点
     if (result === 'victory') this.centerOnCurrent(true);
+  }
+
+  /** 清理 registry 中的战斗回流键 */
+  private cleanupBattleRegistry(): void {
+    this.registry.remove('lastBattleResult');
+    this.registry.remove('pendingBattleNodeId');
+  }
+
+  /** 判断给定 Boss 节点是否为最终 Boss（地图最大深度） */
+  private isFinalBoss(node: MapNode): boolean {
+    const maxDepth = this.nodes.reduce((m, n) => Math.max(m, n.depth), 0);
+    return node.depth >= maxDepth;
+  }
+
+  /** 写本局统计快照到 registry，供 GameOverScene 读取 */
+  private writeGameOverStats(outcome: 'victory' | 'defeat'): void {
+    const completedNodes = this.nodes.filter(n => n.completed);
+    const runRelics = (this.registry.get('runRelics') as unknown[] | undefined) ?? [];
+    this.registry.set('gameOverStats', {
+      outcome,
+      classId: this.classId,
+      maxDepthReached: completedNodes.length > 0
+        ? Math.max(...completedNodes.map(n => n.depth))
+        : 0,
+      enemiesDefeated: completedNodes.filter(n => n.type === 'enemy' || n.type === 'elite' || n.type === 'boss').length,
+      relicsCollected: runRelics.length,
+      goldEarned: (this.registry.get('runGold') as number | undefined) ?? 0,
+    });
   }
 
   // ============================================================================

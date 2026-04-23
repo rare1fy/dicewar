@@ -481,9 +481,35 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * 写本局统计快照到 registry，供 GameOverScene 读取。
+   * @param outcome 结局类型：'victory' / 'defeat'
+   * @param fromMap 是否从 Map 进入的战斗（true 时 MapScene 已写统计，本方法 skip）
+   */
+  private writeGameOverStats(outcome: 'victory' | 'defeat', fromMap: boolean): void {
+    if (fromMap) return; // MapScene already wrote stats
+    
+    const runRelics = (this.registry.get('runRelics') as unknown[] | undefined) ?? [];
+    this.registry.set('gameOverStats', {
+      outcome,
+      classId: this.classId,
+      maxDepthReached: 0, // 非 Map 直启路径默认 0
+      enemiesDefeated: 0, // 懒得记；future：战斗快照累计击败数
+      relicsCollected: runRelics.length,
+      goldEarned: (this.registry.get('runGold') as number | undefined) ?? 0,
+    });
+  }
+
   private restartBattle(): void { this.leaveToScene(null); }
-  private backToClassSelect(): void { this.leaveToScene('ClassSelectScene'); }
-  private backToStart(): void { this.leaveToScene('StartScene'); }
+  private backToClassSelect(): void {
+    this.writeGameOverStats('defeat', false); // 换职业 = 放弃本局
+    this.leaveToScene('ClassSelectScene');
+  }
+  private backToStart(): void {
+    // α-go GAMEOVER：战斗失败（非 fromMap 路径） → 写统计 → 跳 GameOverScene
+    this.writeGameOverStats('defeat', false);
+    this.leaveToScene('GameOverScene');
+  }
   /** 从 Map 进入的战斗胜败后回 Map；MapScene 在 create 里读 registry.lastBattleResult 更新节点状态 */
   private backToMap(): void { this.leaveToScene('MapScene'); }
   /**
@@ -519,4 +545,4 @@ export class BattleScene extends Phaser.Scene {
     }
     this.isLeavingScene = false;
   }
-}
+}
